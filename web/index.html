@@ -529,11 +529,6 @@
           <span id="gear5HudBadge" class="hidden rounded-lg bg-rose-500/20 px-2.5 py-1 text-xs font-extrabold text-rose-300 ring-1 ring-rose-500/50">GEAR 5 ACTIVE</span>
         </div>
 
-        <div class="flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-950/85 px-3.5 py-1 text-xs font-semibold shadow-md backdrop-blur-sm">
-          <span id="hudZoneBadge" class="rounded-full bg-cyan-500/20 px-2 py-0.5 text-[11px] font-bold text-cyan-300">ZONE 0 - SAFE HARBOR</span>
-          <span id="hudBackendTag" class="font-mono-code text-[11px] text-emerald-400">Browser Movement</span>
-          <span class="font-mono-code text-[11px] text-amber-300">B: return to base (1 Log Pose)</span>
-        </div>
       </div>
 
       <div class="flex flex-col items-end gap-2">
@@ -1318,8 +1313,6 @@
         document.getElementById('hudBossCardText').textContent = p.bossCard ? 'READY' : 'LOCKED';
         document.getElementById('hudEscapeKeyBadge').classList.toggle('hidden', !p.escapeKey);
         document.getElementById('gear5HudBadge').classList.toggle('hidden', !p.gear5Active);
-        document.getElementById('hudZoneBadge').textContent = data.zoneLabel;
-
         const imu = (data.enemies || []).find(e => e.boss && e.hp > 0);
         const bossBar = document.getElementById('bossHudBar');
         if (data.realm === 'IMU' && imu) {
