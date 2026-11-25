@@ -7,6 +7,8 @@ public class Projectile {
     private final long id;
     private double x;
     private double y;
+    private double previousX;
+    private double previousY;
     private final double vx;
     private final double vy;
     private final double radius;
@@ -24,6 +26,8 @@ public class Projectile {
         this.id = NEXT_ID.incrementAndGet();
         this.x = x;
         this.y = y;
+        this.previousX = x;
+        this.previousY = y;
         this.vx = vx;
         this.vy = vy;
         this.radius = radius;
@@ -41,8 +45,15 @@ public class Projectile {
     }
 
     public void setPosition(double x, double y) {
+        this.previousX = this.x;
+        this.previousY = this.y;
         this.x = x;
         this.y = y;
+    }
+
+    public void markCollisionChecked() {
+        previousX = x;
+        previousY = y;
     }
 
     public boolean hasAlreadyHit(int enemyId) {
@@ -62,6 +73,8 @@ public class Projectile {
     public long getId() { return id; }
     public double getX() { return x; }
     public double getY() { return y; }
+    public double getPreviousX() { return previousX; }
+    public double getPreviousY() { return previousY; }
     public double getVx() { return vx; }
     public double getVy() { return vy; }
     public double getRadius() { return radius; }

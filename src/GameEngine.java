@@ -492,8 +492,15 @@ public class GameEngine {
     }
 
     public synchronized String executePlayerAction(String action, int paramValue) {
+        return executePlayerAction(action, paramValue, Double.NaN);
+    }
+
+    public synchronized String executePlayerAction(String action, int paramValue, double aimAngle) {
         if (action == null || player == null) {
             return "INVALID_ACTION";
+        }
+        if (Double.isFinite(aimAngle)) {
+            player.setAimAngle(aimAngle);
         }
 
         if ("PAUSE".equals(action)) {
@@ -713,9 +720,8 @@ public class GameEngine {
 
         w.consumeShot();
         int scaledDmg = (int) Math.round(w.getScaledDamage() * player.getDamageMultiplier());
-        double muzzleDist = player.getRadius() + 12.0;
-        double mx = player.getX() + Math.cos(player.getAimAngle()) * muzzleDist;
-        double my = player.getY() + Math.sin(player.getAimAngle()) * muzzleDist;
+        double mx = player.getX() + 16.0 + Math.cos(player.getAimAngle()) * 26.0;
+        double my = player.getY() + 9.0 + Math.sin(player.getAimAngle()) * 26.0;
 
         int pellets = w.getPelletCount();
         for (int i = 0; i < pellets; i++) {
@@ -959,35 +965,40 @@ public class GameEngine {
             Projectile pr = projectiles.get(i);
             pr.advanceLifetime(dt);
 
-            if (pr.isExpired() || hitsAnyWallOrClosedGate(pr.getX(), pr.getY())
-                    || (pr.isFromPlayer() && isPlayerInSafeHarbor())) {
+            if (pr.isExpired() || (pr.isFromPlayer() && isPlayerInSafeHarbor())) {
                 projectiles.remove(i);
                 continue;
             }
 
             boolean removed = false;
+            double wallHitTime = firstWallHitTime(pr.getPreviousX(), pr.getPreviousY(),
+                    pr.getX(), pr.getY(), pr.getRadius());
             if (pr.isFromPlayer()) {
+                PirateEnemy target = null;
+                double targetHitTime = Double.POSITIVE_INFINITY;
                 for (int j = 0; j < enemies.size(); j++) {
                     PirateEnemy en = enemies.get(j);
                     if (!en.isAlive() || !isEnemyInCurrentRealm(en) || pr.hasAlreadyHit(en.getId())) {
                         continue;
                     }
-                    double dist = Math.hypot(pr.getX() - en.getX(), pr.getY() - en.getY());
-                    if (dist < pr.getRadius() + en.getRadius()) {
-                        en.takeDamage(pr.getDamage());
-                        pushEvent("-" + pr.getDamage(), "#fde047", en.getX(), en.getY() - en.getRadius() - 8);
-
-                        if (!en.isAlive()) {
-                            handleEnemyDefeated(en);
-                        }
-
-                        if (pr.isPiercing()) {
-                            pr.recordHit(en.getId());
-                        } else {
-                            projectiles.remove(i);
-                            removed = true;
-                        }
-                        break;
+                    double hitTime = segmentCircleEntryTime(pr.getPreviousX(), pr.getPreviousY(),
+                            pr.getX(), pr.getY(), en.getX(), en.getY(),
+                            pr.getRadius() + en.getRadius());
+                    if (hitTime < targetHitTime && hitTime < wallHitTime) {
+                        target = en;
+                        targetHitTime = hitTime;
+                    }
+                }
+                if (target != null) {
+                    target.takeDamage(pr.getDamage());
+                    pushEvent("-" + pr.getDamage(), "#fde047", target.getX(),
+                            target.getY() - target.getRadius() - 8);
+                    if (!target.isAlive()) handleEnemyDefeated(target);
+                    if (pr.isPiercing()) {
+                        pr.recordHit(target.getId());
+                    } else {
+                        projectiles.remove(i);
+                        removed = true;
                     }
                 }
             } else {
@@ -995,34 +1006,93 @@ public class GameEngine {
                     projectiles.remove(i);
                     continue;
                 }
-                double dist = Math.hypot(pr.getX() - player.getX(), pr.getY() - player.getY());
-                if (dist < pr.getRadius() + player.getRadius() - 3.0) {
+                double playerHitTime = segmentCircleEntryTime(pr.getPreviousX(), pr.getPreviousY(),
+                        pr.getX(), pr.getY(), player.getX(), player.getY(),
+                        pr.getRadius() + player.getRadius() - 3.0);
+                if (playerHitTime < wallHitTime) {
                     applyDamageToPlayer(pr.getDamage());
                     projectiles.remove(i);
                     removed = true;
                 }
             }
 
+            if (!removed && Double.isFinite(wallHitTime)) {
+                projectiles.remove(i);
+                removed = true;
+            }
             if (!removed) {
+                pr.markCollisionChecked();
                 i++;
             }
         }
     }
 
-    private boolean hitsAnyWallOrClosedGate(double px, double py) {
+    private double segmentCircleEntryTime(double x1, double y1, double x2, double y2,
+                                          double cx, double cy, double radius) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double lengthSquared = dx * dx + dy * dy;
+        double fx = x1 - cx;
+        double fy = y1 - cy;
+        double c = fx * fx + fy * fy - radius * radius;
+        if (c <= 0.0) return 0.0;
+        if (lengthSquared <= 0.000001) return Double.POSITIVE_INFINITY;
+        double b = 2.0 * (fx * dx + fy * dy);
+        double discriminant = b * b - 4.0 * lengthSquared * c;
+        if (discriminant < 0.0) return Double.POSITIVE_INFINITY;
+        double entryTime = (-b - Math.sqrt(discriminant)) / (2.0 * lengthSquared);
+        return entryTime >= 0.0 && entryTime <= 1.0
+                ? entryTime : Double.POSITIVE_INFINITY;
+    }
+
+    private double firstWallHitTime(double x1, double y1, double x2, double y2, double radius) {
+        double firstHit = Double.POSITIVE_INFINITY;
         for (int i = 0; i < walls.size(); i++) {
-            if (walls.get(i).containsPoint(px, py)) {
-                return true;
-            }
+            WorldObstacle wall = walls.get(i);
+            firstHit = Math.min(firstHit, segmentRectangleEntryTime(x1, y1, x2, y2,
+                    wall.getX() - radius, wall.getY() - radius,
+                    wall.getX() + wall.getWidth() + radius,
+                    wall.getY() + wall.getHeight() + radius));
         }
         for (int i = 0; i < gates.size(); i++) {
             SectorGate g = gates.get(i);
-            if (!g.isOpened() && px >= g.getX() && px <= g.getX() + g.getWidth() &&
-                py >= g.getY() && py <= g.getY() + g.getHeight()) {
-                return true;
+            if (!g.isOpened()) {
+                firstHit = Math.min(firstHit, segmentRectangleEntryTime(x1, y1, x2, y2,
+                        g.getX() - radius, g.getY() - radius,
+                        g.getX() + g.getWidth() + radius,
+                        g.getY() + g.getHeight() + radius));
             }
         }
-        return false;
+        return firstHit;
+    }
+
+    private double segmentRectangleEntryTime(double x1, double y1, double x2, double y2,
+                                             double minX, double minY, double maxX, double maxY) {
+        double tMin = 0.0;
+        double tMax = 1.0;
+        double[] starts = {x1, y1};
+        double[] deltas = {x2 - x1, y2 - y1};
+        double[] mins = {minX, minY};
+        double[] maxs = {maxX, maxY};
+        for (int axis = 0; axis < 2; axis++) {
+            if (Math.abs(deltas[axis]) < 0.000001) {
+                if (starts[axis] < mins[axis] || starts[axis] > maxs[axis]) {
+                    return Double.POSITIVE_INFINITY;
+                }
+                continue;
+            }
+            double near = (mins[axis] - starts[axis]) / deltas[axis];
+            double far = (maxs[axis] - starts[axis]) / deltas[axis];
+            if (near > far) {
+                double swap = near;
+                near = far;
+                far = swap;
+            }
+            tMin = Math.max(tMin, near);
+            tMax = Math.min(tMax, far);
+            if (tMin > tMax) return Double.POSITIVE_INFINITY;
+        }
+        return tMax < 0.0 || tMin > 1.0 ? Double.POSITIVE_INFINITY : Math.max(0.0, tMin);
     }
 
     void handleEnemyDefeated(PirateEnemy en) {

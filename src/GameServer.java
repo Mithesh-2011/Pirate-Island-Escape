@@ -143,7 +143,8 @@ public class GameServer {
             String body = readBody(exchange);
             String action = extractJsonString(body, "action", "");
             int param = (int) Math.round(extractJsonDouble(body, "param", 0.0));
-            String result = engine.executePlayerAction(action, param);
+            double aimAngle = extractJsonDouble(body, "aimAngle", Double.NaN);
+            String result = engine.executePlayerAction(action, param, aimAngle);
             sendJson(exchange, 200, "{\"result\":\"" + result + "\"}");
         }
     }

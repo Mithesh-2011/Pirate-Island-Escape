@@ -1080,9 +1080,7 @@
           musicGain.connect(audioMaster);
         }
         if (audioContext.state === 'suspended') {
-          audioContext.resume().then(startMusic).catch(() => {});
-        } else {
-          startMusic();
+          audioContext.resume().catch(() => {});
         }
       }
 
@@ -1132,7 +1130,9 @@
       }
 
       function startMusic() {
-        if (!audioEnabled || !audioContext || musicTimer) return;
+        if (!audioEnabled || !audioContext || musicTimer || !serverSnap
+            || serverSnap.mode !== 'PLAYING'
+            || !document.getElementById('startScreen').classList.contains('hidden')) return;
         const melody = [293.66, 349.23, 392, 440, 392, 349.23, 293.66, 261.63,
           293.66, 392, 440, 523.25, 493.88, 440, 392, 349.23];
         const bass = [146.83, 146.83, 174.61, 174.61, 196, 196, 130.81, 130.81];
@@ -1161,6 +1161,13 @@
           }
           musicStep++;
         }, 268);
+      }
+
+      function stopMusic() {
+        if (musicTimer) {
+          clearInterval(musicTimer);
+          musicTimer = null;
+        }
       }
 
       function playSound(kind) {
@@ -1227,12 +1234,14 @@
         }
       }
 
-      async function sendActionToJava(action, param = 0) {
+      async function sendActionToJava(action, param = 0, aimAngle = null) {
         try {
+          const payload = { action, param };
+          if (Number.isFinite(aimAngle)) payload.aimAngle = aimAngle;
           const res = await fetch('/api/action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, param })
+            body: JSON.stringify(payload)
           });
           const result = await res.json();
           if (action === 'DASH') {
@@ -1542,6 +1551,8 @@
 
       function returnToHome() {
         sessionRevision++;
+        stopMusic();
+        if (audioContext && audioContext.state === 'running') audioContext.suspend();
         closeModals();
         document.getElementById('pauseModal').classList.add('hidden');
         document.getElementById('pauseModal').classList.remove('flex');
@@ -2536,7 +2547,9 @@
         if (e.button === 0) {
           mouse.down = true;
           if (serverSnap && serverSnap.mode === 'PLAYING' && !activeModal) {
-            sendActionToJava('FIRE');
+            const p = getRenderedPlayer();
+            const aimAngle = Math.atan2((mouse.y + camY) - p.y, (mouse.x + camX) - p.x);
+            sendActionToJava('FIRE', 0, aimAngle);
           }
         }
       });
@@ -2578,6 +2591,8 @@
           document.getElementById('startScreen').classList.add('hidden');
           document.getElementById('hudLayer').classList.remove('hidden');
           syncHudFromJava(serverSnap);
+          ensureAudio();
+          startMusic();
         } catch (error) {
           const banner = document.getElementById('serverWarningBanner');
           banner.textContent = `Unable to start game: ${error.message}`;
@@ -2603,11 +2618,9 @@
         updateAudioToggle();
         if (audioEnabled) {
           ensureAudio();
+          startMusic();
         } else if (audioContext && audioContext.state === 'running') {
-          if (musicTimer) {
-            clearInterval(musicTimer);
-            musicTimer = null;
-          }
+          stopMusic();
           audioContext.suspend();
         }
       };

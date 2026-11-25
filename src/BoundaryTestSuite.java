@@ -84,6 +84,35 @@ public class BoundaryTestSuite {
                         && movementSnapshot.contains("\"vx\":")
                         && movementSnapshot.contains("\"vy\":"),
                 "Snapshots include the movement data used by the browser renderer");
+        GameEngine sweptShotEngine = new GameEngine();
+        sweptShotEngine.resetGame("Normal", "Swept Projectile Test");
+        PirateEnemy sweptShotTarget = sweptShotEngine.getEnemies().get(0);
+        sweptShotTarget.setPosition(1100, 1300);
+        for (PirateEnemy enemy : sweptShotEngine.getEnemies()) {
+            if (enemy != sweptShotTarget) enemy.setPosition(5000, 2000);
+        }
+        sweptShotEngine.getPlayer().setPosition(900, 1800);
+        int targetHpBeforeSweptShot = sweptShotTarget.getHp();
+        Projectile sweptShot = new Projectile(1000, 1300, 6000, 0, 5, 20,
+                1.0, true, false, "#ffffff", "#ffffff");
+        sweptShotEngine.getProjectiles().add(sweptShot);
+        sweptShotEngine.getWalls().add(new WorldObstacle(1120, 1280, 20, 40, "test_wall"));
+        sweptShotEngine.updateClientMovement(900, 1800,
+                java.util.Collections.emptyMap(),
+                java.util.Collections.singletonMap(sweptShot.getId(), new double[]{1200, 1300}));
+        sweptShotEngine.tick(1.0 / 60.0);
+        assertCondition(sweptShotTarget.getHp() == targetHpBeforeSweptShot - 20,
+                "Fast projectiles hit enemies crossed between browser position updates");
+        GameEngine muzzleEngine = new GameEngine();
+        muzzleEngine.resetGame("Normal", "Muzzle Alignment Test");
+        muzzleEngine.getPlayer().setPosition(900, 1300);
+        double firingAngle = Math.PI / 2.0;
+        assertCondition("FIRED".equals(muzzleEngine.executePlayerAction("FIRE", 0, firingAngle)),
+                "A shot uses the latest pointer aim angle");
+        Projectile muzzleShot = muzzleEngine.getProjectiles().get(0);
+        assertCondition(Math.abs(muzzleShot.getX() - 916) < 0.1
+                        && Math.abs(muzzleShot.getY() - 1335) < 0.1,
+                "Projectile starts at the player's visible weapon muzzle");
         Projectile browserMovedProjectile = weaponEnergyEngine.getProjectiles().get(0);
         double projectileStartX = browserMovedProjectile.getX();
         weaponEnergyEngine.tick(0.1);
