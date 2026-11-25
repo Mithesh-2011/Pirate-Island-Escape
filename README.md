@@ -57,7 +57,7 @@ Use **New > Blueprint** in Render and connect this repository. Render reads `ren
 
 The browser runs player, enemy, projectile, and camera movement at display frame rate. It sends compact position updates to Java, which keeps collision, combat, damage, and progression checks authoritative. State snapshots are polled less often to reduce host load. An original swashbuckling theme and synthesized sound effects run in the browser; shot sounds play only when ammunition is consumed. Use the **Audio** toggle to mute them.
 
-The map has five surface sections, each with twenty physical crates and trees arranged in alternating zigzags; tree trunks block players and projectiles. Enemies, chests, and portals are kept clear of these obstacles. The IMU Keycard Warden in section five drops the keycard that unlocks the IMU portal, now located in that same section. IMU retains boss-specific laser attacks in the Empty Throne realm.
+The map has five surface sections, each with twenty physical crates and trees arranged in alternating zigzags; tree trunks block players and projectiles. Enemies, chests, and portals are kept clear of these obstacles. The Boss Card Warden in section five drops the Boss Card that unlocks the IMU portal, now located in that same section. The Boss Card stays with you until the run ends, so you can reuse the portal freely. IMU retains boss-specific laser attacks in the Empty Throne realm.
 
 ---
 
@@ -66,7 +66,7 @@ The map has five surface sections, each with twenty physical crates and trees ar
 1. Choose Easy, Normal, Hard, or Expert and a captain name on the home screen, then select **Start game**. Easy uses weaker enemies; each difficulty has 2, 4, 6, or 8 enemies in each surface section.
 2. You start with **0 berries**. Defeated pirates leave berry pickups and have a **50% chance** to drop a Log Pose; move close to collect either item. Berry rewards are about **15% higher** than before.
 3. Chests must be opened with **E** when nearby, provide health, energy, and berries, and return after 40 seconds. Chests appear in every surface section and in the Empty Throne realm.
-4. Cross the five sections, collecting Log Poses to open the guarded gates. Defeat the IMU Keycard Warden in section 5 and collect its keycard to unlock the IMU portal there. Enter the Gold Key portal in section 2 to fight three stronger, non-respawning guardians in their own realm; each drops one Gold Key. Regular enemies and chests do not drop Gold Keys. Use all three keys to open the Secret Poneglyph Vault and claim Gear 5.
+4. Cross the five sections, collecting Log Poses to open the guarded gates. Defeat the Boss Card Warden in section 5 and collect the Boss Card to unlock the IMU portal there. The Boss Card is reusable for the rest of the run. Enter the Gold Key portal in section 2 to fight three stronger, non-respawning guardians in their own realm; each drops one Gold Key. Regular enemies and chests do not drop Gold Keys. Use all three keys to open the Secret Poneglyph Vault and claim Gear 5.
 5. Spend berries at the armory and forge. Armory weapons cost **15, 28, 45, and 68 berries**; rarity upgrades cost **23, 45, 80, then 140 berries**. Armory listings show weapon damage, ammo capacity, and energy cost; the currently selected weapon is highlighted.
 6. Press **B** to return to base from anywhere, spending one Log Pose. Pirates cannot attack and weapons cannot be fired while you are on the full brown harbor pad.
 7. Pirates return at their defeat location after **3 minutes**. Enemy firing rates are 30% lower, and all enemies—including bosses—deal 50% less damage than before. All weapons take **3 seconds** to reload; energy regenerates at **1 point per second**, and each shot costs 1 energy. Enemy health and damage scale with difficulty.
@@ -79,7 +79,7 @@ The map has five surface sections, each with twenty physical crates and trees ar
 - **Gum-Gum Rocket Dash:** `Space` or `Shift` *(costs 25 Energy; grants brief invulnerability; energy regenerates at 1 per second)*
 - **Open Chests / Unlock Gates / Use Armory, Forge & Thousand Sunny:** `E` (stand close; the ship needs IMU's Escape Key)
 - **Return to Base:** `B` *(costs 1 Green Log Pose)*
-- **Portals:** press `E` at the section 2 portal to enter the Gold Key realm, or at the section 5 portal to enter the Empty Throne realm. The section 5 portal requires the IMU Keycard from the Keycard Warden. Each realm has a return portal.
+- **Portals:** press `E` at the section 2 portal to enter the Gold Key realm, or at the section 5 portal to enter the Empty Throne realm. The section 5 portal requires the reusable Boss Card from the Boss Card Warden. Each realm has a return portal.
 - **Gear 5:** claim the vault reward with `E` to increase player damage by 40%, raise maximum health to 150, and regenerate 2 energy per second. It is an upgrade, not a weapon.
 - **Pause / Resume:** `P` *(the pause screen also lets you return home)*
 - **Instructions:** `I`

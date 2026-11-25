@@ -130,7 +130,7 @@ public class PirateEnemy {
     public String getPrimaryColor() { return primaryColor; }
     public String getAccentColor() { return accentColor; }
     public boolean isBoss() { return boss; }
-    public boolean isImuKeycardCarrier() { return "imu_key_holder".equals(type); }
+    public boolean isBossCardCarrier() { return "boss_card_holder".equals(type); }
     public double getX() { return x; }
     public double getY() { return y; }
     public int getHp() { return hp; }

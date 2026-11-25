@@ -35,7 +35,7 @@ public class BoundaryTestSuite {
         GameEngine imuLaserEngine = new GameEngine();
         imuLaserEngine.resetGame("Normal", "Boss Laser Test");
         imuLaserEngine.getPlayer().setPosition(5100, 1300);
-        imuLaserEngine.getPlayer().addImuKeycard();
+        imuLaserEngine.getPlayer().addBossCard();
         assertCondition("PORTAL_TRAVELLED".equals(imuLaserEngine.executePlayerAction("INTERACT", 0)),
                 "Boss laser test enters the Empty Throne realm");
         for (int i = 0; i < 240; i++) {
@@ -491,8 +491,8 @@ public class BoundaryTestSuite {
                 "IMU is isolated in the Empty Throne realm");
         portalBossEngine.getPlayer().setPosition(5100, 1300);
         assertCondition("GATE_LOCKED".equals(portalBossEngine.executePlayerAction("INTERACT", 0)),
-                "The IMU portal stays locked until the section 5 keycard is collected");
-        portalBossEngine.getPlayer().addImuKeycard();
+                "The IMU portal stays locked until the section 5 Boss Card is collected");
+        portalBossEngine.getPlayer().addBossCard();
         assertCondition("PORTAL_TRAVELLED".equals(portalBossEngine.executePlayerAction("INTERACT", 0))
                 && "IMU".equals(portalBossEngine.getCurrentRealm())
                 && portalBossEngine.toJsonSnapshot().contains("\"id\":\"imu_exit\"")
@@ -503,37 +503,44 @@ public class BoundaryTestSuite {
                 && "MAIN".equals(portalBossEngine.getCurrentRealm())
                 && portalBossEngine.getPlayer().getX() == 5100,
                 "The IMU realm portal returns to section 5");
+        assertCondition(portalBossEngine.getPlayer().hasBossCard()
+                        && "PORTAL_TRAVELLED".equals(portalBossEngine.executePlayerAction("INTERACT", 0))
+                        && "IMU".equals(portalBossEngine.getCurrentRealm()),
+                "The Boss Card remains usable for repeated portal trips");
         assertCondition(returnEngine.toJsonSnapshot().contains("\"portals\":[")
                 && returnEngine.toJsonSnapshot().contains("\"realm\":\"MAIN\""),
                 "Realm and portal state are included in the game snapshot");
 
-        GameEngine imuKeycardEngine = new GameEngine();
-        imuKeycardEngine.resetGame("Normal", "IMU Keycard Test");
-        PirateEnemy keycardCarrier = imuKeycardEngine.getEnemies().stream()
-                .filter(PirateEnemy::isImuKeycardCarrier).findFirst().orElseThrow();
+        GameEngine bossCardEngine = new GameEngine();
+        bossCardEngine.resetGame("Normal", "Boss Card Test");
+        PirateEnemy keycardCarrier = bossCardEngine.getEnemies().stream()
+                .filter(PirateEnemy::isBossCardCarrier).findFirst().orElseThrow();
         assertCondition(keycardCarrier.getX() >= 4578 && keycardCarrier.getX() < 5360
-                        && imuKeycardEngine.getEnemies().stream()
+                        && bossCardEngine.getEnemies().stream()
                                 .noneMatch(enemy -> enemy.getX() >= 5360 && enemy.getX() < 6200),
-                "The keycard carrier is in the fifth and final section");
+                "The Boss Card Warden is in the fifth and final section");
         keycardCarrier.takeDamage(keycardCarrier.getHp());
-        imuKeycardEngine.handleEnemyDefeated(keycardCarrier, 0.99);
-        imuKeycardEngine.tick(1.0 / 60.0);
-        assertCondition(imuKeycardEngine.getLootDrops().stream()
-                        .anyMatch(drop -> "IMU_KEYCARD".equals(drop.getType()))
-                        && imuKeycardEngine.getEnemies().stream()
+        bossCardEngine.handleEnemyDefeated(keycardCarrier, 0.99);
+        bossCardEngine.tick(1.0 / 60.0);
+        assertCondition(bossCardEngine.getLootDrops().stream()
+                        .anyMatch(drop -> "BOSS_CARD".equals(drop.getType()))
+                        && bossCardEngine.getEnemies().stream()
                                 .noneMatch(enemy -> enemy.getId() == keycardCarrier.getId()),
-                "The one-time section-five carrier drops an IMU Keycard");
-        LootDrop imuCard = imuKeycardEngine.getLootDrops().stream()
-                .filter(drop -> "IMU_KEYCARD".equals(drop.getType())).findFirst().orElseThrow();
-        imuKeycardEngine.getPlayer().setPosition(imuCard.getX(), imuCard.getY());
-        imuKeycardEngine.tick(1.0 / 60.0);
-        assertCondition(imuKeycardEngine.getPlayer().getImuKeycards() == 1
-                        && imuKeycardEngine.toJsonSnapshot().contains("\"imuKeycards\":1"),
-                "Collecting the special drop adds the IMU Keycard to inventory");
-        imuKeycardEngine.getPlayer().setPosition(5100, 1300);
-        assertCondition("PORTAL_TRAVELLED".equals(imuKeycardEngine.executePlayerAction("INTERACT", 0))
-                        && imuKeycardEngine.getPlayer().getImuKeycards() == 0,
-                "The special keycard unlocks the IMU portal in section five");
+                "The one-time section-five carrier drops a Boss Card");
+        LootDrop bossCardDrop = bossCardEngine.getLootDrops().stream()
+                .filter(drop -> "BOSS_CARD".equals(drop.getType())).findFirst().orElseThrow();
+        bossCardEngine.getPlayer().setPosition(bossCardDrop.getX(), bossCardDrop.getY());
+        bossCardEngine.tick(1.0 / 60.0);
+        assertCondition(bossCardEngine.getPlayer().hasBossCard()
+                        && bossCardEngine.toJsonSnapshot().contains("\"bossCard\":true"),
+                "Collecting the Boss Card permanently unlocks the boss portal for this run");
+        bossCardEngine.getPlayer().setPosition(5100, 1300);
+        assertCondition("PORTAL_TRAVELLED".equals(bossCardEngine.executePlayerAction("INTERACT", 0))
+                        && bossCardEngine.getPlayer().hasBossCard(),
+                "Using the Boss Card does not consume it");
+        bossCardEngine.resetGame("Normal", "Boss Card Reset Test");
+        assertCondition(!bossCardEngine.getPlayer().hasBossCard(),
+                "Starting a new game resets the Boss Card");
 
         GameEngine harborEngine = new GameEngine();
         harborEngine.resetGame("Normal", "Safe Harbor Test");

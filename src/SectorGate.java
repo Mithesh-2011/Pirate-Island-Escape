@@ -7,7 +7,7 @@ public class SectorGate {
     private final double height;
     private final int requiredGreenKeys;
     private final int requiredGoldKeys;
-    private final int requiredSpecialKeys;
+    private final int requiredBossCards;
     private final String hexColor;
     private boolean opened;
 
@@ -17,7 +17,7 @@ public class SectorGate {
     }
 
     public SectorGate(String id, String name, double x, double y, double width, double height,
-                      int requiredGreenKeys, int requiredGoldKeys, int requiredSpecialKeys,
+                      int requiredGreenKeys, int requiredGoldKeys, int requiredBossCards,
                       String hexColor) {
         this.id = id;
         this.name = name;
@@ -27,7 +27,7 @@ public class SectorGate {
         this.height = height;
         this.requiredGreenKeys = Math.max(0, requiredGreenKeys);
         this.requiredGoldKeys = Math.max(0, requiredGoldKeys);
-        this.requiredSpecialKeys = Math.max(0, requiredSpecialKeys);
+        this.requiredBossCards = Math.max(0, requiredBossCards);
         this.hexColor = hexColor;
         this.opened = false;
     }
@@ -36,12 +36,12 @@ public class SectorGate {
         return canUnlock(playerGreenKeys, playerGoldKeys, 0);
     }
 
-    public boolean canUnlock(int playerGreenKeys, int playerGoldKeys, int playerSpecialKeys) {
+    public boolean canUnlock(int playerGreenKeys, int playerGoldKeys, int playerBossCards) {
         if (opened) {
             return false;
         }
-        if (requiredSpecialKeys > 0) {
-            return playerSpecialKeys >= requiredSpecialKeys;
+        if (requiredBossCards > 0) {
+            return playerBossCards >= requiredBossCards;
         }
         if (requiredGoldKeys > 0) {
             return playerGoldKeys >= requiredGoldKeys;
@@ -64,7 +64,7 @@ public class SectorGate {
     public double getHeight() { return height; }
     public int getRequiredGreenKeys() { return requiredGreenKeys; }
     public int getRequiredGoldKeys() { return requiredGoldKeys; }
-    public int getRequiredSpecialKeys() { return requiredSpecialKeys; }
+    public int getRequiredBossCards() { return requiredBossCards; }
     public String getHexColor() { return hexColor; }
     public boolean isOpened() { return opened; }
 }

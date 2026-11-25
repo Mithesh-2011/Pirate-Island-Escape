@@ -388,7 +388,7 @@ public class GameEngine {
         ensureSectionEnemyCount(4578, 5360, Math.max(0, gateReq * 2 - 1), hpMult, dmgMult,
                 new double[][] {{4620, 740}, {4680, 1880}, {4900, 740}, {5200, 1840}, {5300, 740},
                         {4600, 1840}, {4820, 1880}, {5000, 740}, {5240, 1880}, {5320, 980}});
-        addAddedSectorEnemy("imu_key_holder", "IMU Keycard Warden", 4860, 1300, 25, 300,
+        addAddedSectorEnemy("boss_card_holder", "Boss Card Warden", 4860, 1300, 25, 300,
                 120, 28, 1.35, 360, 28, 0, "#9f1239", "#fda4af", hpMult, dmgMult);
 
     }
@@ -598,13 +598,10 @@ public class GameEngine {
     private String handleInteract() {
         for (PortalRoute portal : portals) {
             if (portal.realm.equals(currentRealm) && player.distanceTo(portal.x, portal.y) <= 92.0) {
-                if ("imu_entry".equals(portal.id) && player.getImuKeycards() < 1) {
-                    pushEvent("Find the IMU Keycard in section 5 first!",
+                if ("imu_entry".equals(portal.id) && !player.hasBossCard()) {
+                    pushEvent("Find the Boss Card in section 5 first!",
                             "#fda4af", player.getX(), player.getY() - 28);
                     return "GATE_LOCKED";
-                }
-                if ("imu_entry".equals(portal.id)) {
-                    player.spendImuKeycards(1);
                 }
                 currentRealm = portal.destinationRealm;
                 player.setPosition(portal.destinationX, portal.destinationY);
@@ -627,21 +624,19 @@ public class GameEngine {
             SectorGate g = gates.get(i);
             if (!g.isOpened() && player.distanceTo(g.getCenterX(), g.getCenterY()) <= 125.0) {
                 if (g.canUnlock(player.getGreenLogPoses(), player.getGoldKeycards(),
-                        player.getImuKeycards())) {
-                    if (g.getRequiredSpecialKeys() > 0) {
-                        player.spendImuKeycards(g.getRequiredSpecialKeys());
-                    } else if (g.getRequiredGoldKeys() > 0) {
+                        player.hasBossCard() ? 1 : 0)) {
+                    if (g.getRequiredBossCards() == 0 && g.getRequiredGoldKeys() > 0) {
                         player.spendGoldKeycards(g.getRequiredGoldKeys());
                         secretVaultUnlocked = true;
-                    } else {
+                    } else if (g.getRequiredBossCards() == 0) {
                         player.spendGreenLogPoses(g.getRequiredGreenKeys());
                     }
                     g.setOpened(true);
                     pushEvent(g.getName() + " UNLOCKED!", "#22c55e", g.getCenterX(), g.getCenterY() - 20);
                     return "GATE_UNLOCKED";
                 } else {
-                    String msg = (g.getRequiredSpecialKeys() > 0)
-                            ? "Need " + g.getRequiredSpecialKeys() + " IMU Keycard!"
+                    String msg = (g.getRequiredBossCards() > 0)
+                            ? "Need " + g.getRequiredBossCards() + " Boss Card!"
                             : (g.getRequiredGoldKeys() > 0)
                             ? "Need " + g.getRequiredGoldKeys() + " Gold Keycards!"
                             : "Need " + g.getRequiredGreenKeys() + " Green Log Poses!";
@@ -788,9 +783,10 @@ public class GameEngine {
             } else if ("GOLD_KEY".equals(drop.getType())) {
                 player.addGoldKeycard();
                 pushEvent("+1 GOLD KEY", "#facc15", drop.getX(), drop.getY() - 16);
-            } else if ("IMU_KEYCARD".equals(drop.getType())) {
-                player.addImuKeycard();
-                pushEvent("+1 IMU KEYCARD", "#fda4af", drop.getX(), drop.getY() - 16);
+            } else if ("BOSS_CARD".equals(drop.getType())) {
+                player.addBossCard();
+                pushEvent("BOSS CARD ACQUIRED! IMU PORTAL UNLOCKED", "#fda4af",
+                        drop.getX(), drop.getY() - 16);
                 } else if ("ESCAPE_KEY".equals(drop.getType())) {
                     player.addEscapeKey();
                     pushEvent("ESCAPE KEY ACQUIRED! RETURN TO THE THOUSAND SUNNY!",
@@ -1121,15 +1117,15 @@ public class GameEngine {
 
         if (en.getGoldKeyDrop() > 0) {
             lootDrops.add(new LootDrop("GOLD_KEY", en.getX() + 14, en.getY() + 8, 1));
-        } else if (en.isImuKeycardCarrier()) {
-            lootDrops.add(new LootDrop("IMU_KEYCARD", en.getX() + 14, en.getY() + 8, 1));
+        } else if (en.isBossCardCarrier()) {
+            lootDrops.add(new LootDrop("BOSS_CARD", en.getX() + 14, en.getY() + 8, 1));
         } else {
             pendingEnemyRespawns.add(new PendingEnemyRespawn(en, ENEMY_RESPAWN_SECONDS));
         }
         String rewardMsg = (en.getBerryDrop() > 0 ? "BERRIES DROPPED" : "")
                 + (logPoseDropped ? "  LOG POSE DROPPED" : "")
                 + (en.getGoldKeyDrop() > 0 ? "  GOLD KEY DROPPED!" : "")
-                + (en.isImuKeycardCarrier() ? "  IMU KEYCARD DROPPED!" : "");
+                + (en.isBossCardCarrier() ? "  BOSS CARD DROPPED!" : "");
         if (!rewardMsg.isEmpty()) {
             pushEvent(rewardMsg, "#34d399", en.getX(), en.getY() - 20);
         }
@@ -1287,7 +1283,7 @@ public class GameEngine {
         sb.append("\"berries\":").append(player.getBerries()).append(",");
         sb.append("\"greenKeys\":").append(player.getGreenLogPoses()).append(",");
         sb.append("\"goldKeys\":").append(player.getGoldKeycards()).append(",");
-        sb.append("\"imuKeycards\":").append(player.getImuKeycards()).append(",");
+        sb.append("\"bossCard\":").append(player.hasBossCard()).append(",");
         sb.append("\"escapeKey\":").append(player.hasEscapeKey()).append(",");
         sb.append("\"gear5Active\":").append(player.hasGear5()).append(",");
         sb.append("\"aimAngle\":").append(String.format(java.util.Locale.US, "%.3f", player.getAimAngle())).append(",");
@@ -1340,7 +1336,7 @@ public class GameEngine {
               .append(",\"w\":").append(g.getWidth()).append(",\"h\":").append(g.getHeight())
               .append(",\"reqGreen\":").append(g.getRequiredGreenKeys())
               .append(",\"reqGold\":").append(g.getRequiredGoldKeys())
-              .append(",\"reqSpecial\":").append(g.getRequiredSpecialKeys())
+              .append(",\"reqBossCard\":").append(g.getRequiredBossCards())
               .append(",\"opened\":").append(g.isOpened())
               .append(",\"color\":\"").append(g.getHexColor()).append("\"}");
         }
