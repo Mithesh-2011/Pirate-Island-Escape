@@ -1,6 +1,6 @@
 # Grand Line Escape — Java Backend Architecture
 
-A top-down action escape game themed around **One Piece**, engineered with an authoritative **13-class Java Object-Oriented Backend** (`com.sun.net.httpserver.HttpServer` + 60 Hz simulation engine) and a **60 FPS Browser Canvas Client**.
+A top-down action escape game themed around **One Piece**, engineered with an authoritative Java backend (`com.sun.net.httpserver.HttpServer` + 60 Hz simulation engine) and a **60 FPS Browser Canvas Client**.
 
 ---
 
@@ -20,10 +20,12 @@ GrandLine-JavaBackend/
 │   ├── WorldObstacle.java      # Solid walls/rocks/pillars with Circle-vs-AABB sliding collision math
 │   ├── LootDrop.java           # Physical berry and Log Pose pickups
 │   ├── Projectile.java         # Active projectiles with piercing support
-│   ├── SkyLaser.java           # Stage 3 Buster Call & Imu Mother Flame orbital sky-beams
+│   ├── SkyLaser.java           # IMU boss orbital sky-beams
 │   └── BoundaryTestSuite.java  # Automated gameplay boundary and input-validation tests
 ├── web/
-│   └── index.html              # 60 FPS browser renderer, illustrated level-selection screen and HUD
+│   └── index.html              # 60 FPS renderer, client-predicted movement, audio, level selection and HUD
+├── Dockerfile                  # Multi-stage Java image for deployment
+├── render.yaml                 # Render Blueprint web-service configuration
 ├── run.bat                     # One-click Windows compile & launch script
 ├── run.sh                      # One-click macOS / Linux compile & launch script
 └── README.md                   # Architecture & gameplay guide
@@ -48,6 +50,14 @@ javac -d out src/*.java
 java -cp out Main
 ```
 Once started, open **`http://localhost:8080`** in your browser (it opens automatically on most desktops).
+
+### Deploy to Render
+
+Use **New > Blueprint** in Render and connect this repository. Render reads `render.yaml`, builds the Java service from `Dockerfile`, and uses `/health` for health checks. The server binds to Render's `PORT` environment variable; local runs default to port 8080.
+
+The browser predicts WASD/dash movement and animates enemy and projectile motion at display frame rate, reconciling against the Java simulation snapshots. The Java server remains authoritative for collisions, combat, and progression. Music and synthesized sound effects run in the browser; use the **Audio** toggle to mute them.
+
+Each surface section has a fixed layout of ten physical crates and trees; tree trunks block players and projectiles. Section five has no environmental lasers. IMU retains its boss-specific laser attacks in the Empty Throne realm.
 
 ---
 

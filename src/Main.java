@@ -6,7 +6,7 @@ public class Main {
         try {
             BoundaryTestSuite.runAllTests();
 
-            int port = 8080;
+            int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
             GameEngine engine = new GameEngine();
             GameServer server = new GameServer(port, engine);
             server.start();
@@ -18,7 +18,8 @@ public class Main {
             System.out.println("  Press Ctrl+C in this terminal to stop the server.");
             System.out.println("==============================================================\n");
 
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            if (System.getenv("PORT") == null && Desktop.isDesktopSupported()
+                    && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
                 Desktop.getDesktop().browse(new URI(url));
             }
         } catch (Exception e) {

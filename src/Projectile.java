@@ -1,7 +1,10 @@
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class Projectile {
+    private static final AtomicLong NEXT_ID = new AtomicLong();
+    private final long id;
     private double x;
     private double y;
     private final double vx;
@@ -18,6 +21,7 @@ public class Projectile {
     public Projectile(double x, double y, double vx, double vy, double radius, int damage,
                       double life, boolean fromPlayer, boolean piercing,
                       String color, String rarityColor) {
+        this.id = NEXT_ID.incrementAndGet();
         this.x = x;
         this.y = y;
         this.vx = vx;
@@ -52,8 +56,11 @@ public class Projectile {
     }
 
     public boolean isExpired() { return remainingLife <= 0.0; }
+    public long getId() { return id; }
     public double getX() { return x; }
     public double getY() { return y; }
+    public double getVx() { return vx; }
+    public double getVy() { return vy; }
     public double getRadius() { return radius; }
     public int getDamage() { return damage; }
     public boolean isFromPlayer() { return fromPlayer; }

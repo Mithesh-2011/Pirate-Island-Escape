@@ -28,7 +28,20 @@ public class WorldObstacle {
                 cx += (dx / dist) * overlap;
                 cy += (dy / dist) * overlap;
             } else {
-                cx += radius;
+                double left = cx - x;
+                double right = x + width - cx;
+                double top = cy - y;
+                double bottom = y + height - cy;
+                double nearest = Math.min(Math.min(left, right), Math.min(top, bottom));
+                if (nearest == left) {
+                    cx = x - radius;
+                } else if (nearest == right) {
+                    cx = x + width + radius;
+                } else if (nearest == top) {
+                    cy = y - radius;
+                } else {
+                    cy = y + height + radius;
+                }
             }
         }
         return new double[]{cx, cy};

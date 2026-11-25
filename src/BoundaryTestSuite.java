@@ -7,6 +7,42 @@ public class BoundaryTestSuite {
     public static void runAllTests() {
         System.out.println("=== Running Boundary & Reliability Tests ===");
 
+        SkyLaser repeatingLaser = new SkyLaser(0, 0, 0, 100, 3.6,
+                0.4, 1.3, 0.85, 26, false, 28);
+        repeatingLaser.update(0.89);
+        assertCondition(repeatingLaser.isWarning() && !repeatingLaser.isFiring(),
+                "Section laser warning precedes its firing window");
+        repeatingLaser.update(0.02);
+        assertCondition(repeatingLaser.isFiring(),
+                "Section laser enters its firing window on schedule");
+        repeatingLaser.update(2.4);
+        assertCondition(repeatingLaser.isWarning() && !repeatingLaser.isFiring(),
+                "Section laser returns to warning after firing");
+        repeatingLaser.update(7.2);
+        assertCondition(repeatingLaser.isWarning() && !repeatingLaser.isFiring(),
+                "Section laser preserves its cycle after multiple missed periods");
+        GameEngine sectionFiveLaserEngine = new GameEngine();
+        sectionFiveLaserEngine.resetGame("Normal", "Section Five Laser Test");
+        sectionFiveLaserEngine.getPlayer().setPosition(4660, 1300);
+        assertCondition(sectionFiveLaserEngine.getLasers().isEmpty(),
+                "The fifth section starts without environmental laser hazards");
+        for (int i = 0; i < 300; i++) {
+            sectionFiveLaserEngine.tick(1.0 / 60.0);
+        }
+        assertCondition(sectionFiveLaserEngine.getLasers().isEmpty(),
+                "The fifth section remains free of environmental lasers");
+
+        GameEngine imuLaserEngine = new GameEngine();
+        imuLaserEngine.resetGame("Normal", "Boss Laser Test");
+        imuLaserEngine.getPlayer().setPosition(5140, 1300);
+        assertCondition("PORTAL_TRAVELLED".equals(imuLaserEngine.executePlayerAction("INTERACT", 0)),
+                "Boss laser test enters the Empty Throne realm");
+        for (int i = 0; i < 240; i++) {
+            imuLaserEngine.tick(1.0 / 60.0);
+        }
+        assertCondition(!imuLaserEngine.getLasers().isEmpty(),
+                "IMU continues to summon one-shot laser attacks");
+
         Player testPlayer = new Player("StrawHatLuffyPirateKing:AdminHack", 500, 500);
         assertCondition(testPlayer.getCaptainCallsign().length() <= 18, "Callsign truncated via length() & substring()");
         assertCondition(testPlayer.getCaptainCallsign().indexOf(":") == -1, "Disallowed colon stripped via indexOf()");
@@ -29,6 +65,13 @@ public class BoundaryTestSuite {
                 "Firing a weapon consumes energy");
         assertCondition(weaponEnergyEngine.toJsonSnapshot().contains("\"energyCost\":1.0"),
                 "Weapon energy costs are included in the game snapshot");
+        String movementSnapshot = weaponEnergyEngine.toJsonSnapshot();
+        assertCondition(movementSnapshot.contains("\"speed\":")
+                        && movementSnapshot.contains("\"attackRange\":")
+                        && movementSnapshot.contains("\"projectiles\":[{\"id\":")
+                        && movementSnapshot.contains("\"vx\":")
+                        && movementSnapshot.contains("\"vy\":"),
+                "Snapshots include the movement data used by the browser renderer");
         GameEngine safeHarborWeaponEngine = new GameEngine();
         safeHarborWeaponEngine.resetGame("Normal", "Safe Harbor Weapon Test");
         Weapon harborWeapon = safeHarborWeaponEngine.getPlayer().getEquippedWeapon();
@@ -87,6 +130,43 @@ public class BoundaryTestSuite {
         sectionEngine.resetGame("Normal", "Section Count Test");
         assertCondition(hasExactSectionEnemyCounts(sectionEngine, 2),
                 "Every surface section has exactly twice its Log Pose requirement in enemies");
+        double[][] obstacleSections = {
+            {300, 1740}, {1778, 2690}, {2728, 3590}, {3628, 4540}, {4578, 5360}
+        };
+        boolean evenlySpacedObstacles = true;
+        for (double[] sectionBounds : obstacleSections) {
+            long obstacleCount = sectionEngine.getWalls().stream()
+                    .filter(wall -> "crate".equals(wall.getMaterialType())
+                            || "tree".equals(wall.getMaterialType()))
+                    .filter(wall -> wall.getX() >= sectionBounds[0]
+                            && wall.getX() + wall.getWidth() <= sectionBounds[1])
+                    .count();
+            long treeCount = sectionEngine.getWalls().stream()
+                    .filter(wall -> "tree".equals(wall.getMaterialType()))
+                    .filter(wall -> wall.getX() >= sectionBounds[0]
+                            && wall.getX() + wall.getWidth() <= sectionBounds[1])
+                    .count();
+            evenlySpacedObstacles &= obstacleCount == 10 && treeCount == 5;
+        }
+        assertCondition(evenlySpacedObstacles,
+                "Each section has ten evenly distributed crates and physical trees");
+        WorldObstacle treeObstacle = sectionEngine.getWalls().stream()
+                .filter(wall -> "tree".equals(wall.getMaterialType())).findFirst().orElseThrow();
+        double treeCenterX = treeObstacle.getX() + treeObstacle.getWidth() / 2.0;
+        double treeCenterY = treeObstacle.getY() + treeObstacle.getHeight() / 2.0;
+        sectionEngine.getPlayer().setPosition(treeCenterX, treeCenterY);
+        sectionEngine.tick(1.0 / 60.0);
+        assertCondition(treeObstacle.containsPoint(treeCenterX, treeCenterY)
+                        && !treeObstacle.containsPoint(sectionEngine.getPlayer().getX(),
+                                sectionEngine.getPlayer().getY()),
+                "Tree trunks have solid player collision hitboxes");
+        WorldObstacle boxObstacle = sectionEngine.getWalls().stream()
+                .filter(wall -> "crate".equals(wall.getMaterialType())).findFirst().orElseThrow();
+        double boxCenterX = boxObstacle.getX() + boxObstacle.getWidth() / 2.0;
+        double boxCenterY = boxObstacle.getY() + boxObstacle.getHeight() / 2.0;
+        double[] boxResolved = boxObstacle.resolveCircleCollision(boxCenterX, boxCenterY, 20.0);
+        assertCondition(!boxObstacle.containsPoint(boxResolved[0], boxResolved[1]),
+                "Overlapping obstacle resolution moves entities fully out of boxes");
         assertCondition(hasChestInEveryMapSection(sectionEngine),
                 "Chests spawn in the harbor, all five surface sections, and throne area");
         PirateEnemy[] firstSectionEnemies = sectionEngine.getEnemies().stream()

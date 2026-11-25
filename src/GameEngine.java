@@ -175,37 +175,7 @@ public class GameEngine {
         gates.add(new SectorGate("secret_vault", "Secret Poneglyph Vault", 3065, 645, 110, 28,
                 0, SECRET_VAULT_GOLD_KEY_REQUIREMENT, "#eab308"));
 
-        walls.add(new WorldObstacle(1020, 950, 68, 56, "rock"));
-        walls.add(new WorldObstacle(1180, 1520, 74, 58, "rock"));
-        walls.add(new WorldObstacle(1450, 1060, 64, 64, "crate"));
-        walls.add(new WorldObstacle(1480, 1560, 64, 64, "crate"));
-        walls.add(new WorldObstacle(2860, 980, 82, 64, "ruin"));
-        walls.add(new WorldObstacle(2920, 1580, 82, 64, "ruin"));
-        walls.add(new WorldObstacle(3280, 1140, 76, 76, "ruin"));
-        walls.add(new WorldObstacle(3320, 1560, 84, 62, "ruin"));
-        walls.add(new WorldObstacle(4720, 940, 76, 66, "obsidian"));
-        walls.add(new WorldObstacle(4760, 1620, 76, 66, "obsidian"));
-        walls.add(new WorldObstacle(4980, 1080, 68, 68, "obsidian"));
-        walls.add(new WorldObstacle(4980, 1480, 68, 68, "obsidian"));
-
-        walls.add(new WorldObstacle(900, 920, 70, 58, "rock"));
-        walls.add(new WorldObstacle(1320, 1280, 72, 64, "crate"));
-        walls.add(new WorldObstacle(1510, 1780, 86, 62, "ruin"));
-        walls.add(new WorldObstacle(3080, 1740, 72, 72, "ruin"));
-        walls.add(new WorldObstacle(3370, 920, 70, 70, "rock"));
-        walls.add(new WorldObstacle(3450, 1780, 76, 64, "crate"));
-        walls.add(new WorldObstacle(4800, 1760, 80, 72, "obsidian"));
-        walls.add(new WorldObstacle(5100, 980, 72, 72, "obsidian"));
-        walls.add(new WorldObstacle(820, 680, 66, 58, "rock"));
-        walls.add(new WorldObstacle(1625, 700, 72, 62, "crate"));
-        walls.add(new WorldObstacle(1810, 1960, 78, 64, "rock"));
-        walls.add(new WorldObstacle(2350, 620, 72, 60, "crate"));
-        walls.add(new WorldObstacle(3000, 1940, 80, 68, "ruin"));
-        walls.add(new WorldObstacle(3500, 1050, 72, 64, "rock"));
-        walls.add(new WorldObstacle(3790, 620, 76, 62, "crate"));
-        walls.add(new WorldObstacle(4290, 1910, 78, 64, "rock"));
-        walls.add(new WorldObstacle(4630, 700, 74, 62, "obsidian"));
-        walls.add(new WorldObstacle(5250, 1940, 80, 68, "obsidian"));
+        addSectionObstacles();
 
         addRealmWalls(6500, 600, 1300, 1400, "gold_realm_wall");
         addRealmWalls(8700, 600, 1900, 1600, "imu_realm_wall");
@@ -245,11 +215,30 @@ public class GameEngine {
         chests.add(new RarityChest(9250, 1550, 3));
         chests.add(new RarityChest(10300, 1550, 4));
 
-        int laserDmg = (int) Math.round(28 * dmgMult);
-        lasers.add(new SkyLaser(4660, 520, 4660, 2080, 3.6, 0.4, 1.3, 0.85, 26, false, laserDmg));
-        lasers.add(new SkyLaser(4860, 520, 4860, 2080, 3.6, 1.6, 1.3, 0.85, 26, false, laserDmg));
-        lasers.add(new SkyLaser(5020, 520, 5020, 2080, 3.6, 2.8, 1.3, 0.85, 26, false, laserDmg));
-        lasers.add(new SkyLaser(4560, 1300, 5220, 1300, 4.2, 1.1, 1.4, 0.90, 24, false, laserDmg));
+    }
+
+    private void addSectionObstacles() {
+        double[][] sections = {
+            {300, 1740}, {1778, 2690}, {2728, 3590}, {3628, 4540}, {4578, 5360}
+        };
+        double[] obstacleRows = {1050, 1760};
+        String[] materials = {"crate", "tree"};
+        for (int section = 0; section < sections.length; section++) {
+            double minX = sections[section][0];
+            double width = sections[section][1] - minX;
+            for (int row = 0; row < obstacleRows.length; row++) {
+                for (int column = 0; column < 5; column++) {
+                    double centerX = minX + width * (column + 1) / 6.0;
+                    double centerY = obstacleRows[row];
+                    String type = materials[(column + row + section) % materials.length];
+                    if ("tree".equals(type)) {
+                        walls.add(new WorldObstacle(centerX - 17, centerY - 12, 34, 32, type));
+                    } else {
+                        walls.add(new WorldObstacle(centerX - 33, centerY - 30, 66, 60, type));
+                    }
+                }
+            }
+        }
     }
 
     private void addRealmWalls(double x, double y, double width, double height, String type) {
@@ -770,7 +759,20 @@ public class GameEngine {
                 cx += dx / distance * overlap;
                 cy += dy / distance * overlap;
             } else {
-                cx += radius;
+                double left = cx - x;
+                double right = x + width - cx;
+                double top = cy - y;
+                double bottom = y + height - cy;
+                double nearest = Math.min(Math.min(left, right), Math.min(top, bottom));
+                if (nearest == left) {
+                    cx = x - radius;
+                } else if (nearest == right) {
+                    cx = x + width + radius;
+                } else if (nearest == top) {
+                    cy = y - radius;
+                } else {
+                    cy = y + height + radius;
+                }
             }
         }
         return new double[]{cx, cy};
@@ -1216,6 +1218,8 @@ public class GameEngine {
               .append("\",\"x\":").append(String.format(java.util.Locale.US, "%.1f", e.getX()))
               .append(",\"y\":").append(String.format(java.util.Locale.US, "%.1f", e.getY()))
               .append(",\"radius\":").append(e.getRadius())
+              .append(",\"speed\":").append(String.format(java.util.Locale.US, "%.1f", e.getSpeed()))
+              .append(",\"attackRange\":").append(String.format(java.util.Locale.US, "%.1f", e.getAttackRange()))
               .append(",\"hp\":").append(e.getHp()).append(",\"maxHp\":").append(e.getMaxHp())
               .append(",\"color\":\"").append(e.getPrimaryColor()).append("\",\"accent\":\"").append(e.getAccentColor())
               .append("\",\"boss\":").append(e.isBoss())
@@ -1228,8 +1232,11 @@ public class GameEngine {
         for (int i = 0; i < projectiles.size(); i++) {
             Projectile p = projectiles.get(i);
             if (i > 0) sb.append(",");
-            sb.append("{\"x\":").append(String.format(java.util.Locale.US, "%.1f", p.getX()))
+            sb.append("{\"id\":").append(p.getId())
+              .append(",\"x\":").append(String.format(java.util.Locale.US, "%.1f", p.getX()))
               .append(",\"y\":").append(String.format(java.util.Locale.US, "%.1f", p.getY()))
+              .append(",\"vx\":").append(String.format(java.util.Locale.US, "%.1f", p.getVx()))
+              .append(",\"vy\":").append(String.format(java.util.Locale.US, "%.1f", p.getVy()))
               .append(",\"radius\":").append(p.getRadius())
               .append(",\"color\":\"").append(p.getColor())
               .append("\",\"rarityColor\":\"").append(p.getRarityColor()).append("\"}");
@@ -1264,8 +1271,10 @@ public class GameEngine {
     public boolean isImuDefeated() { return imuDefeated; }
     public String getCurrentRealm() { return currentRealm; }
     List<PirateEnemy> getEnemies() { return enemies; }
+    List<WorldObstacle> getWalls() { return walls; }
     public List<RarityChest> getChests() { return chests; }
     public List<SectorGate> getGates() { return gates; }
     List<LootDrop> getLootDrops() { return lootDrops; }
     List<Projectile> getProjectiles() { return projectiles; }
+    List<SkyLaser> getLasers() { return lasers; }
 }

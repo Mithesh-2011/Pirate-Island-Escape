@@ -26,9 +26,10 @@ public class GameServer {
     }
 
     public void start() throws IOException {
-        server = HttpServer.create(new InetSocketAddress(port), 0);
+        server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
 
         server.createContext("/", new StaticHtmlHandler());
+        server.createContext("/health", new HealthHandler());
 
         server.createContext("/api/state", new StateHandler());
         server.createContext("/api/start", new StartHandler());
@@ -46,6 +47,17 @@ public class GameServer {
                 ex.printStackTrace();
             }
         }, 0, 16, TimeUnit.MILLISECONDS);
+    }
+
+    private class HealthHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            byte[] body = "ok".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
+        }
     }
 
     private class StaticHtmlHandler implements HttpHandler {

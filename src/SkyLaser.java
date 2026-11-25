@@ -29,8 +29,8 @@ public class SkyLaser {
 
     public void update(double dt) {
         timer += dt;
-        if (!oneShot && timer >= cycleDuration) {
-            timer -= cycleDuration;
+        if (!oneShot && cycleDuration > 0.0 && timer >= cycleDuration) {
+            timer %= cycleDuration;
         }
     }
 

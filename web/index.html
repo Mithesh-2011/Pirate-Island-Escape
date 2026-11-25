@@ -460,6 +460,9 @@
 <body class="text-slate-100 antialiased">
 
   <canvas id="gameCanvas"></canvas>
+  <button id="audioToggle" type="button" class="fixed bottom-4 right-4 z-20 rounded bg-slate-950/85 px-3 py-2 text-xs font-bold text-white shadow-lg" aria-pressed="true" title="Toggle music and sound effects">
+    Audio: On
+  </button>
 
   <div id="serverWarningBanner" class="fixed inset-x-0 top-0 z-50 hidden bg-rose-600 px-4 py-2.5 text-center text-xs font-extrabold text-white shadow-xl">
     Java backend not connected. Run <code class="rounded bg-slate-950 px-1.5 py-0.5 font-mono-code">run.bat</code> (Windows) or <code class="rounded bg-slate-950 px-1.5 py-0.5 font-mono-code">./run.sh</code> (Mac/Linux), then open <code class="underline">http://localhost:8080</code>.
@@ -743,6 +746,17 @@
         { name: 'Legendary', color: '#eab308', glow: 'rgba(234, 179, 8, 0.70)' }
       ];
 
+      const WALL_PALETTES = {
+        cliff: { top: '#c4aa78', bottom: '#584533', edge: '#ead4a6' },
+        fortress: { top: '#b7a283', bottom: '#514638', edge: '#e2c99a' },
+        ruin: { top: '#9c9076', bottom: '#49463d', edge: '#d1c2a0' },
+        rock: { top: '#9a9d8b', bottom: '#4d554f', edge: '#d5d0b1' },
+        crate: { top: '#c47b3d', bottom: '#61351f', edge: '#f0be70' },
+        obsidian: { top: '#66717a', bottom: '#171e29', edge: '#a2aab0' },
+        gold_realm_wall: { top: '#c8a653', bottom: '#47351f', edge: '#ffdf76' },
+        imu_realm_wall: { top: '#8f4955', bottom: '#281924', edge: '#e67881' }
+      };
+
       const STATIONS = [
         { id: 'sunny_ship',      type: 'SHIP',          name: 'Thousand Sunny (Escape Ship)',       x: 375,  y: 1300, radius: 58, color: '#f59e0b' },
         { id: 'armory_station',  type: 'ARMORY',        name: 'Armory Vending Machine',             x: 440,  y: 1550, radius: 36, color: '#c27a42' },
@@ -750,14 +764,45 @@
         { id: 'secret_pedestal', type: 'GEAR5',         name: 'Gear 5 Energy Booster',               x: 3120, y: 540,  radius: 32, color: '#eab308' }
       ];
 
-      const PALM_TREES = [
-        [920, 620, 1.0], [1120, 580, 1.1], [1380, 640, 0.95], [1600, 580, 1.05],
-        [940, 1960, 1.0], [1220, 1980, 1.15], [1540, 1940, 0.92], [2780, 650, 1.05],
-        [2840, 1920, 1.0], [3150, 1960, 1.1], [3440, 640, 0.95], [3460, 1920, 1.05]
-      ];
-
       const canvas = document.getElementById('gameCanvas');
       const ctx = canvas.getContext('2d');
+      function makeTerrainTexture(color, seed, wave = false) {
+        const tile = document.createElement('canvas');
+        tile.width = 128;
+        tile.height = 128;
+        const tileCtx = tile.getContext('2d');
+        tileCtx.strokeStyle = color;
+        tileCtx.fillStyle = color;
+        if (wave) {
+          tileCtx.lineWidth = 2;
+          for (let i = 0; i < 5; i++) {
+            const y = 12 + i * 27;
+            tileCtx.beginPath();
+            tileCtx.moveTo((i * 31) % 40, y);
+            tileCtx.bezierCurveTo(48, y - 12, 72, y + 12, 128, y - 3);
+            tileCtx.stroke();
+          }
+        } else {
+          for (let i = 0; i < 34; i++) {
+            const x = (i * 47 + seed * 19) % 128;
+            const y = (i * 71 + seed * 29) % 128;
+            const radius = 1 + (i % 3);
+            tileCtx.globalAlpha = 0.35 + (i % 4) * 0.1;
+            tileCtx.beginPath();
+            tileCtx.ellipse(x, y, radius * 1.8, radius, (i % 5) * 0.3, 0, Math.PI * 2);
+            tileCtx.fill();
+          }
+        }
+        return ctx.createPattern(tile, 'repeat');
+      }
+      const TERRAIN_TEXTURES = {
+        water: makeTerrainTexture('rgba(194, 238, 241, .42)', 1, true),
+        sand: makeTerrainTexture('rgba(115, 77, 42, .34)', 2),
+        stone: makeTerrainTexture('rgba(226, 205, 166, .30)', 3),
+        jungle: makeTerrainTexture('rgba(178, 213, 132, .30)', 4),
+        coast: makeTerrainTexture('rgba(91, 48, 36, .34)', 5),
+        ash: makeTerrainTexture('rgba(202, 209, 198, .32)', 6)
+      };
       let viewportW = window.innerWidth;
       let viewportH = window.innerHeight;
       function resizeCanvas() {
@@ -784,6 +829,21 @@
       let sendingInput = false;
       let sessionRevision = 0;
       let startingGame = false;
+      let clientPlayer = null;
+      let clientDashSeconds = 0;
+      let clientDashCooldown = 0;
+      let awaitingDashResult = false;
+      let clientDashX = 0;
+      let clientDashY = 0;
+      let lastFrameMs = 0;
+      let enemyVisuals = new Map();
+      let projectileVisuals = new Map();
+      let audioContext = null;
+      let audioMaster = null;
+      let musicTimer = null;
+      let musicStep = 0;
+      let audioEnabled = true;
+      let lastShotSoundAt = 0;
 
       async function pollJavaState() {
         if (pollingState || startingGame) return;
@@ -795,6 +855,7 @@
           const data = await res.json();
           if (requestRevision !== sessionRevision) return;
           document.getElementById('serverWarningBanner').classList.add('hidden');
+          reconcileClientVisuals(data, serverSnap);
           serverSnap = data;
           ingestServerEvents(data.events || []);
           syncHudFromJava(data);
@@ -805,10 +866,267 @@
         }
       }
 
+      function reconcileClientVisuals(data, previous) {
+        const p = data.player;
+        if (!clientPlayer || !previous || data.realm !== previous.realm || previous.mode !== 'PLAYING') {
+          clientPlayer = { x: p.x, y: p.y, walkBob: p.walkBob };
+          clientDashSeconds = 0;
+          clientDashCooldown = 0;
+          awaitingDashResult = false;
+        } else {
+          const error = Math.hypot(p.x - clientPlayer.x, p.y - clientPlayer.y);
+          if (error > 220) {
+            clientPlayer.x = p.x;
+            clientPlayer.y = p.y;
+          } else {
+            clientPlayer.x += (p.x - clientPlayer.x) * 0.25;
+            clientPlayer.y += (p.y - clientPlayer.y) * 0.25;
+          }
+          if (!keys['KeyW'] && !keys['KeyA'] && !keys['KeyS'] && !keys['KeyD']
+              && !keys['ArrowUp'] && !keys['ArrowLeft'] && !keys['ArrowDown'] && !keys['ArrowRight']) {
+            clientPlayer.walkBob = p.walkBob;
+          }
+        }
+
+        const activeEnemies = new Map();
+        for (const enemy of (data.enemies || [])) activeEnemies.set(enemy.id, enemy);
+        for (const id of enemyVisuals.keys()) {
+          if (!activeEnemies.has(id)) enemyVisuals.delete(id);
+        }
+        for (const enemy of activeEnemies.values()) {
+          const visual = enemyVisuals.get(enemy.id);
+          if (!visual || !previous || data.realm !== previous.realm
+              || Math.hypot(enemy.x - visual.x, enemy.y - visual.y) > 180) {
+            enemyVisuals.set(enemy.id, { x: enemy.x, y: enemy.y });
+          } else {
+            visual.x += (enemy.x - visual.x) * 0.2;
+            visual.y += (enemy.y - visual.y) * 0.2;
+          }
+        }
+
+        const activeProjectiles = new Map();
+        for (const projectile of (data.projectiles || [])) activeProjectiles.set(projectile.id, projectile);
+        for (const id of projectileVisuals.keys()) {
+          if (!activeProjectiles.has(id)) projectileVisuals.delete(id);
+        }
+        for (const projectile of activeProjectiles.values()) {
+          const visual = projectileVisuals.get(projectile.id);
+          if (!visual) {
+            projectileVisuals.set(projectile.id, { x: projectile.x, y: projectile.y });
+          } else {
+            visual.x += (projectile.x - visual.x) * 0.45;
+            visual.y += (projectile.y - visual.y) * 0.45;
+          }
+        }
+      }
+
+      function getRenderedPlayer() {
+        if (!serverSnap || !clientPlayer) return serverSnap && serverSnap.player;
+        const p = serverSnap.player;
+        return {
+          ...p,
+          x: clientPlayer.x,
+          y: clientPlayer.y,
+          walkBob: clientPlayer.walkBob,
+          aimAngle: Math.atan2((mouse.y + camY) - clientPlayer.y, (mouse.x + camX) - clientPlayer.x)
+        };
+      }
+
+      function resolveVisualPosition(x, y, radius, world) {
+        const resolveRect = (cx, cy, r, rx, ry, rw, rh) => {
+          const closestX = Math.max(rx, Math.min(cx, rx + rw));
+          const closestY = Math.max(ry, Math.min(cy, ry + rh));
+          const dx = cx - closestX;
+          const dy = cy - closestY;
+          const distanceSquared = dx * dx + dy * dy;
+          if (distanceSquared < r * r) {
+            const distance = Math.sqrt(distanceSquared);
+            if (distance > 0.0001) {
+              const overlap = r - distance;
+              cx += dx / distance * overlap;
+              cy += dy / distance * overlap;
+            } else {
+              const left = cx - rx;
+              const right = rx + rw - cx;
+              const top = cy - ry;
+              const bottom = ry + rh - cy;
+              const nearest = Math.min(left, right, top, bottom);
+              if (nearest === left) cx = rx - r;
+              else if (nearest === right) cx = rx + rw + r;
+              else if (nearest === top) cy = ry - r;
+              else cy = ry + rh + r;
+            }
+          }
+          return { x: cx, y: cy };
+        };
+        for (const wall of (world.walls || [])) {
+          const pos = resolveRect(x, y, radius, wall.x, wall.y, wall.w, wall.h);
+          x = pos.x;
+          y = pos.y;
+        }
+        for (const gate of (world.gates || [])) {
+          if (gate.opened) continue;
+          const pos = resolveRect(x, y, radius, gate.x, gate.y, gate.w, gate.h);
+          x = pos.x;
+          y = pos.y;
+        }
+        return { x, y };
+      }
+
+      function updateClientSimulation(dt, nowMs) {
+        if (!serverSnap || serverSnap.mode !== 'PLAYING' || !clientPlayer || activeModal) return;
+        clientDashCooldown = Math.max(0, clientDashCooldown - dt);
+        let vx = (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0)
+          - (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0);
+        let vy = (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0)
+          - (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0);
+        const moving = vx !== 0 || vy !== 0;
+        if (clientDashSeconds > 0) {
+          const step = Math.min(dt, clientDashSeconds);
+          const next = resolveVisualPosition(
+            clientPlayer.x + clientDashX * 720 * step,
+            clientPlayer.y + clientDashY * 720 * step,
+            serverSnap.player.radius,
+            serverSnap
+          );
+          clientPlayer.x = next.x;
+          clientPlayer.y = next.y;
+          clientDashSeconds -= step;
+        } else if (moving) {
+          const length = Math.hypot(vx, vy);
+          vx /= length;
+          vy /= length;
+          const next = resolveVisualPosition(
+            clientPlayer.x + vx * 268 * dt,
+            clientPlayer.y + vy * 268 * dt,
+            serverSnap.player.radius,
+            serverSnap
+          );
+          clientPlayer.x = next.x;
+          clientPlayer.y = next.y;
+          clientPlayer.walkBob += dt * 14;
+        } else {
+          clientPlayer.walkBob = 0;
+        }
+
+        const inSafeHarbor = clientPlayer.x >= 310 && clientPlayer.x <= 790
+          && clientPlayer.y >= 1000 && clientPlayer.y <= 1600;
+        if (!inSafeHarbor) {
+          for (const enemy of (serverSnap.enemies || [])) {
+            if (enemy.hp <= 0) continue;
+            const isCurrentRealm = serverSnap.realm === 'GOLD_KEY'
+              ? enemy.type === 'gold_guardian'
+              : serverSnap.realm === 'IMU'
+                ? enemy.boss
+                : !enemy.boss && enemy.type !== 'gold_guardian';
+            if (!isCurrentRealm) continue;
+            const visual = enemyVisuals.get(enemy.id);
+            if (!visual) continue;
+            const dx = clientPlayer.x - visual.x;
+            const dy = clientPlayer.y - visual.y;
+            const distance = Math.hypot(dx, dy);
+            const aggroRange = enemy.boss ? 920 : 480;
+            const preferredDistance = enemy.boss ? 240 : enemy.attackRange * 0.68;
+            if (distance < aggroRange && distance > 0.001) {
+              let moveX = 0;
+              let moveY = 0;
+              if (distance > preferredDistance) {
+                moveX = dx / distance * enemy.speed * dt;
+                moveY = dy / distance * enemy.speed * dt;
+              } else if (enemy.boss) {
+                moveX = Math.cos(serverSnap.elapsedTime * 1.6) * enemy.speed * 0.7 * dt;
+              }
+              const next = resolveVisualPosition(
+                visual.x + moveX, visual.y + moveY, enemy.radius, serverSnap
+              );
+              visual.x = next.x;
+              visual.y = next.y;
+            }
+          }
+        }
+
+        for (const projectile of (serverSnap.projectiles || [])) {
+          const visual = projectileVisuals.get(projectile.id);
+          if (!visual) continue;
+          visual.x += projectile.vx * dt;
+          visual.y += projectile.vy * dt;
+        }
+
+        if (mouse.down && nowMs - lastShotSoundAt > 280) {
+          playSound('fire');
+          lastShotSoundAt = nowMs;
+        }
+      }
+
+      function ensureAudio() {
+        if (!audioEnabled) return;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        if (!audioContext) {
+          audioContext = new AudioContextClass();
+          audioMaster = audioContext.createGain();
+          audioMaster.gain.value = 0.38;
+          audioMaster.connect(audioContext.destination);
+        }
+        if (audioContext.state === 'suspended') {
+          audioContext.resume().then(startMusic).catch(() => {});
+        } else {
+          startMusic();
+        }
+      }
+
+      function playTone(frequency, duration, waveform, volume, delay = 0) {
+        if (!audioEnabled || !audioContext || !audioMaster) return;
+        const start = audioContext.currentTime + delay;
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = waveform;
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(Math.max(volume, 0.0002), start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+        oscillator.connect(gain);
+        gain.connect(audioMaster);
+        oscillator.start(start);
+        oscillator.stop(start + duration + 0.02);
+      }
+
+      function startMusic() {
+        if (!audioEnabled || !audioContext || musicTimer) return;
+        const notes = [220, 261.63, 329.63, 293.66, 196, 246.94, 293.66, 261.63];
+        musicTimer = setInterval(() => {
+          if (!audioEnabled || !audioContext || audioContext.state !== 'running') return;
+          const note = notes[musicStep % notes.length];
+          playTone(note, 0.72, 'sine', 0.035);
+          if (musicStep % 4 === 0) playTone(note / 2, 1.25, 'triangle', 0.025);
+          musicStep++;
+        }, 720);
+      }
+
+      function playSound(kind) {
+        if (!audioEnabled || !audioContext || audioContext.state !== 'running') return;
+        const sounds = {
+          fire: [520, 0.08, 'square', 0.07],
+          dash: [180, 0.22, 'sawtooth', 0.09],
+          interact: [660, 0.16, 'sine', 0.08],
+          reload: [340, 0.12, 'triangle', 0.07],
+          pickup: [880, 0.2, 'sine', 0.09],
+          hit: [120, 0.16, 'sawtooth', 0.12]
+        };
+        const sound = sounds[kind];
+        if (sound) playTone(sound[0], sound[1], sound[2], sound[3]);
+      }
+
+      function updateAudioToggle() {
+        const button = document.getElementById('audioToggle');
+        button.textContent = `Audio: ${audioEnabled ? 'On' : 'Off'}`;
+        button.setAttribute('aria-pressed', String(audioEnabled));
+      }
+
       async function sendInputToJava() {
         if (sendingInput || !serverSnap || serverSnap.mode !== 'PLAYING' || activeModal) return;
         sendingInput = true;
-        const p = serverSnap.player;
+        const p = getRenderedPlayer();
         const aimAngle = Math.atan2((mouse.y + camY) - p.y, (mouse.x + camX) - p.x);
         const payload = {
           up: !!(keys['KeyW'] || keys['ArrowUp']),
@@ -837,7 +1155,29 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action, param })
           });
-          return await res.json();
+          const result = await res.json();
+          if (action === 'DASH') {
+            if (result.result === 'DASHED') {
+              playSound('dash');
+            } else if (awaitingDashResult) {
+              clientDashSeconds = 0;
+              clientDashCooldown = 0;
+              awaitingDashResult = false;
+              if (clientPlayer && serverSnap && serverSnap.player) {
+                clientPlayer.x = serverSnap.player.x;
+                clientPlayer.y = serverSnap.player.y;
+              }
+            }
+            if (result.result === 'DASHED') awaitingDashResult = false;
+          }
+          if (action === 'RELOAD' && result.result === 'RELOADING') playSound('reload');
+          if (action === 'INTERACT'
+              && ['PORTAL_TRAVELLED', 'CHEST_OPENED', 'GATE_UNLOCKED', 'SECRET_CLAIMED', 'VICTORY']
+                .includes(result.result)) {
+            playSound('interact');
+          }
+          if (action === 'RETURN_TO_BASE' && result.result === 'RETURNED_TO_BASE') playSound('interact');
+          return result;
         } catch (e) {
           return null;
         }
@@ -847,6 +1187,11 @@
         for (const ev of events) {
           if (ev.id > latestEventId) {
             latestEventId = ev.id;
+            if (ev.text.startsWith('+B') || ev.text.includes('LOG POSE') || ev.text.includes('GOLD KEY')) {
+              playSound('pickup');
+            } else if (ev.text.includes('HP')) {
+              playSound('hit');
+            }
             floatingTexts.push({
               x: ev.x,
               y: ev.y,
@@ -921,7 +1266,7 @@
       }
 
       function updatePrompt(data) {
-        const p = data.player;
+        const p = getRenderedPlayer();
         const promptEl = document.getElementById('interactPrompt');
         const textEl = document.getElementById('interactPromptText');
 
@@ -1128,7 +1473,7 @@
         ctx.clearRect(0, 0, viewportW, viewportH);
         if (!serverSnap) return;
 
-        const p = serverSnap.player;
+        const p = getRenderedPlayer();
         camX += (p.x - viewportW / 2 - camX) * 0.22;
         camY += (p.y - viewportH / 2 - camY) * 0.22;
 
@@ -1144,7 +1489,7 @@
         drawEnemies();
         drawLuffy(p);
         drawProjectilesAndLasers();
-        drawPalmTrees(p);
+        drawPalmTrees(nowSec);
         drawFloatingTexts();
 
         ctx.restore();
@@ -1152,19 +1497,43 @@
       }
 
       function drawTerrain(p, realm, nowSec) {
+        const ocean = ctx.createLinearGradient(-1000, -1000, 9000, 5000);
+        ocean.addColorStop(0, '#0b668d');
+        ocean.addColorStop(0.48, '#1689b2');
+        ocean.addColorStop(1, '#07516f');
+        ctx.fillStyle = ocean;
+        ctx.fillRect(-12000, -12000, 24000, 24000);
+        ctx.save();
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = TERRAIN_TEXTURES.water;
+        ctx.fillRect(-12000, -12000, 24000, 24000);
+        ctx.restore();
+
         if (realm === 'GOLD_KEY' || realm === 'IMU') {
-          ctx.fillStyle = '#159fe5';
-          ctx.fillRect(-12000, -12000, 24000, 24000);
           const goldRealm = realm === 'GOLD_KEY';
           const x = goldRealm ? 6500 : 8700;
           const y = 600;
           const width = goldRealm ? 1300 : 1900;
           const height = goldRealm ? 1400 : 1600;
-          ctx.fillStyle = goldRealm ? '#56452b' : '#261b26';
+          const floor = ctx.createLinearGradient(x, y, x + width, y + height);
+          floor.addColorStop(0, goldRealm ? '#867043' : '#472d3a');
+          floor.addColorStop(1, goldRealm ? '#342d26' : '#17151f');
+          ctx.fillStyle = floor;
           ctx.fillRect(x + 40, y + 40, width - 80, height - 80);
+          ctx.save();
+          ctx.globalAlpha = 0.34;
+          ctx.fillStyle = TERRAIN_TEXTURES.stone;
+          ctx.fillRect(x + 40, y + 40, width - 80, height - 80);
+          ctx.restore();
+          ctx.shadowColor = goldRealm ? 'rgba(248, 206, 82, .42)' : 'rgba(228, 70, 93, .42)';
+          ctx.shadowBlur = 28;
           ctx.strokeStyle = goldRealm ? '#e5b945' : '#c74754';
           ctx.lineWidth = 8;
           ctx.strokeRect(x + 44, y + 44, width - 88, height - 88);
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = 'rgba(255,255,255,.18)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x + 59, y + 59, width - 118, height - 118);
           ctx.strokeStyle = goldRealm ? 'rgba(255, 230, 150, .22)' : 'rgba(243, 89, 105, .22)';
           ctx.lineWidth = 2;
           for (let offset = 120; offset < width - 80; offset += 150) {
@@ -1180,31 +1549,55 @@
           return;
         }
 
-        ctx.fillStyle = '#159fe5';
-        ctx.fillRect(-12000, -12000, 24000, 24000);
-        ctx.strokeStyle = 'rgba(205, 244, 255, .18)';
-        ctx.lineWidth = 2;
         const shift = Math.sin(nowSec * 0.8) * 20;
-        for (let wy = 440; wy < 2200; wy += 82) {
-          ctx.beginPath(); ctx.moveTo(-5000 + shift, wy); ctx.lineTo(10000 - shift, wy); ctx.stroke();
+        for (let wy = 470; wy < 2200; wy += 156) {
+          ctx.strokeStyle = 'rgba(205, 244, 255, .19)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          for (let x = 0; x <= 2; x++) {
+            const px = 250 + x * 2700 + shift * (x % 2 ? 1 : -1);
+            if (x === 0) ctx.moveTo(px, wy);
+            else ctx.quadraticCurveTo(px - 160, wy - 15, px, wy);
+          }
+          ctx.stroke();
         }
 
+        ctx.save();
+        ctx.shadowColor = 'rgba(8, 39, 43, .48)';
+        ctx.shadowBlur = 34;
+        ctx.shadowOffsetY = 18;
         ctx.fillStyle = '#d9c28e';
         ctx.beginPath(); ctx.roundRect(276, 436, 5100, 1728, 88); ctx.fill();
-        ctx.strokeStyle = 'rgba(248, 231, 183, .8)';
-        ctx.lineWidth = 10;
-        ctx.beginPath(); ctx.roundRect(282, 442, 5088, 1716, 82); ctx.stroke();
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(80, 57, 37, .7)';
+        ctx.lineWidth = 18;
+        ctx.beginPath(); ctx.roundRect(276, 436, 5100, 1728, 88); ctx.stroke();
+        ctx.strokeStyle = 'rgba(248, 231, 183, .9)';
+        ctx.lineWidth = 8;
+        ctx.beginPath(); ctx.roundRect(284, 444, 5084, 1712, 80); ctx.stroke();
 
-        ctx.fillStyle = '#d4ae70';
-        ctx.fillRect(300, 460, 1440, 1680);
-        ctx.fillStyle = '#96714e';
-        ctx.fillRect(1778, 460, 912, 1680);
-        ctx.fillStyle = '#386c4b';
-        ctx.fillRect(2728, 460, 862, 1680);
-        ctx.fillStyle = '#9b6245';
-        ctx.fillRect(3628, 460, 912, 1680);
-        ctx.fillStyle = '#343b3c';
-        ctx.beginPath(); ctx.roundRect(4578, 460, 782, 1680, [0, 82, 82, 0]); ctx.fill();
+        const zones = [
+          [300, 460, 1440, 1680, '#d4ae70', '#b98954', TERRAIN_TEXTURES.sand],
+          [1778, 460, 912, 1680, '#96714e', '#72513a', TERRAIN_TEXTURES.stone],
+          [2728, 460, 862, 1680, '#477a53', '#28533e', TERRAIN_TEXTURES.jungle],
+          [3628, 460, 912, 1680, '#a66c4b', '#774634', TERRAIN_TEXTURES.coast],
+          [4578, 460, 782, 1680, '#515956', '#30383a', TERRAIN_TEXTURES.ash]
+        ];
+        for (const [x, y, width, height, top, bottom, texture] of zones) {
+          const ground = ctx.createLinearGradient(x, y, x + width * 0.35, y + height);
+          ground.addColorStop(0, top);
+          ground.addColorStop(1, bottom);
+          ctx.fillStyle = ground;
+          ctx.fillRect(x, y, width, height);
+          ctx.save();
+          ctx.globalAlpha = 0.42;
+          ctx.fillStyle = texture;
+          ctx.fillRect(x, y, width, height);
+          ctx.restore();
+          ctx.strokeStyle = 'rgba(255, 230, 184, .14)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x + 8, y + 8, width - 16, height - 16);
+        }
 
         ctx.fillStyle = '#6e442c';
         ctx.fillRect(310, 1000, 480, 600);
@@ -1213,8 +1606,8 @@
         ctx.fillStyle = '#683f32';
         ctx.fillRect(3800, 720, 210, 95);
         ctx.fillRect(4170, 1740, 240, 110);
-        ctx.strokeStyle = 'rgba(235, 197, 138, .42)';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(245, 212, 155, .58)';
+        ctx.lineWidth = 4;
         for (let x = 1810; x < 2640; x += 125) {
           ctx.beginPath(); ctx.moveTo(x, 540); ctx.lineTo(x + 54, 680); ctx.stroke();
         }
@@ -1289,34 +1682,76 @@
 
       function drawWallsAndGates() {
         for (const w of (serverSnap.walls || [])) {
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.32)';
-          ctx.beginPath(); ctx.roundRect(w.x + 12, w.y + 14, w.w, w.h, 8); ctx.fill();
+          if (w.type === 'tree') continue;
+          const palette = WALL_PALETTES[w.type] || WALL_PALETTES.rock;
+          ctx.fillStyle = 'rgba(21, 28, 27, .38)';
+          ctx.beginPath(); ctx.roundRect(w.x + 9, w.y + 11, w.w, w.h, 8); ctx.fill();
 
-          ctx.fillStyle = w.type === 'cave' ? '#67503a'
-            : w.type === 'crate' ? '#b45309' : w.type === 'obsidian' ? '#0f172a' : '#475569';
+          const material = ctx.createLinearGradient(w.x, w.y, w.x + w.w * 0.35, w.y + w.h);
+          material.addColorStop(0, palette.top);
+          material.addColorStop(1, palette.bottom);
+          ctx.fillStyle = material;
           ctx.beginPath(); ctx.roundRect(w.x, w.y, w.w, w.h, 8); ctx.fill();
+          ctx.strokeStyle = 'rgba(26, 29, 27, .78)';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.strokeStyle = palette.edge;
+          ctx.globalAlpha = 0.75;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(w.x + 7, w.y + 5);
+          ctx.lineTo(w.x + w.w - 7, w.y + 5);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
           if (w.type === 'crate') {
-            ctx.strokeStyle = '#e2a04b'; ctx.lineWidth = 3;
+            ctx.strokeStyle = palette.edge; ctx.lineWidth = 3;
             ctx.strokeRect(w.x + 7, w.y + 7, w.w - 14, w.h - 14);
-            ctx.beginPath(); ctx.moveTo(w.x + 9, w.y + 9); ctx.lineTo(w.x + w.w - 9, w.y + w.h - 9);
-            ctx.moveTo(w.x + w.w - 9, w.y + 9); ctx.lineTo(w.x + 9, w.y + w.h - 9); ctx.stroke();
-          } else if (w.type === 'rock' || w.type === 'obsidian') {
-            ctx.strokeStyle = w.type === 'rock' ? '#c1a47d' : '#77706d'; ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(w.x + 10, w.y + 10); ctx.lineTo(w.x + w.w - 10, w.y + w.h - 10);
+            ctx.moveTo(w.x + w.w - 10, w.y + 10); ctx.lineTo(w.x + 10, w.y + w.h - 10);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 224, 161, .55)';
+            ctx.fillRect(w.x + 11, w.y + 10, w.w - 22, 3);
+          } else if (w.type === 'rock' || w.type === 'obsidian' || w.type === 'ruin') {
+            ctx.strokeStyle = palette.edge; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(w.x + w.w * 0.2, w.y + w.h * 0.3);
             ctx.lineTo(w.x + w.w * 0.48, w.y + w.h * 0.12);
             ctx.lineTo(w.x + w.w * 0.78, w.y + w.h * 0.38);
+            ctx.lineTo(w.x + w.w * 0.54, w.y + w.h * 0.5);
             ctx.stroke();
-          } else if (w.type === 'fortress') {
-            ctx.fillStyle = 'rgba(230, 192, 139, .18)';
-            ctx.fillRect(w.x + 5, w.y + 20, w.w - 10, 4);
+          } else if (w.type === 'fortress' || w.type === 'cliff'
+                     || w.type === 'gold_realm_wall' || w.type === 'imu_realm_wall') {
+            ctx.strokeStyle = 'rgba(31, 33, 30, .3)';
+            ctx.lineWidth = 2;
+            const horizontal = w.w >= w.h;
+            const length = horizontal ? w.w : w.h;
+            for (let offset = 48; offset < length; offset += 72) {
+              ctx.beginPath();
+              if (horizontal) {
+                ctx.moveTo(w.x + offset, w.y + 4);
+                ctx.lineTo(w.x + offset - 12, w.y + w.h - 4);
+              } else {
+                ctx.moveTo(w.x + 4, w.y + offset);
+                ctx.lineTo(w.x + w.w - 4, w.y + offset - 12);
+              }
+              ctx.stroke();
+            }
           }
         }
 
         for (const g of (serverSnap.gates || [])) {
           if (g.opened) continue;
+          ctx.save();
+          ctx.shadowColor = g.color;
+          ctx.shadowBlur = 18;
           ctx.fillStyle = g.color;
           ctx.beginPath(); ctx.roundRect(g.x, g.y, g.w, g.h, 8); ctx.fill();
-          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.stroke();
+          ctx.restore();
+          ctx.strokeStyle = 'rgba(255, 242, 210, .94)'; ctx.lineWidth = 3; ctx.stroke();
+          ctx.strokeStyle = 'rgba(41, 31, 25, .48)'; ctx.lineWidth = 1;
+          for (let offset = 12; offset < g.w; offset += 18) {
+            ctx.beginPath(); ctx.moveTo(g.x + offset, g.y + 5); ctx.lineTo(g.x + offset, g.y + g.h - 5); ctx.stroke();
+          }
 
           const cx = g.x + g.w / 2, cy = g.y + g.h / 2;
           ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
@@ -1377,14 +1812,15 @@
       function drawEnemies() {
         for (const en of (serverSnap.enemies || [])) {
           if (en.hp <= 0) continue;
+          const visual = enemyVisuals.get(en.id) || en;
 
           ctx.fillStyle = 'rgba(18, 19, 17, .44)';
           ctx.beginPath();
-          ctx.ellipse(en.x + 4, en.y + en.radius * 0.72, en.radius * 1.08, en.radius * 0.48, 0, 0, Math.PI * 2);
+          ctx.ellipse(visual.x + 4, visual.y + en.radius * 0.72, en.radius * 1.08, en.radius * 0.48, 0, 0, Math.PI * 2);
           ctx.fill();
 
           ctx.save();
-          ctx.translate(en.x, en.y);
+          ctx.translate(visual.x, visual.y);
           drawPirateCharacter(en);
           ctx.restore();
 
@@ -1392,14 +1828,14 @@
             ctx.fillStyle = '#facc15';
             ctx.font = '800 10px Inter, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('GOLD KEY GUARDIAN', en.x, en.y - en.radius - 19);
+            ctx.fillText('GOLD KEY GUARDIAN', visual.x, visual.y - en.radius - 19);
           }
           if (en.hp < en.maxHp) {
             const bw = en.boss ? 84 : 42;
             ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-            ctx.fillRect(en.x - bw / 2, en.y - en.radius - 14, bw, 6);
+            ctx.fillRect(visual.x - bw / 2, visual.y - en.radius - 14, bw, 6);
             ctx.fillStyle = en.boss ? '#ef4444' : '#b74436';
-            ctx.fillRect(en.x - bw / 2 + 1, en.y - en.radius - 13, (bw - 2) * (en.hp / en.maxHp), 4);
+            ctx.fillRect(visual.x - bw / 2 + 1, visual.y - en.radius - 13, (bw - 2) * (en.hp / en.maxHp), 4);
           }
         }
       }
@@ -1706,8 +2142,9 @@
 
       function drawProjectilesAndLasers() {
         for (const pr of (serverSnap.projectiles || [])) {
+          const visual = projectileVisuals.get(pr.id) || pr;
           ctx.fillStyle = pr.color;
-          ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.radius, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(visual.x, visual.y, pr.radius, 0, Math.PI * 2); ctx.fill();
         }
         for (const lz of (serverSnap.lasers || [])) {
           if (lz.warning) {
@@ -1722,19 +2159,58 @@
         }
       }
 
-      function drawPalmTrees(p) {
+      function drawPalmTrees(nowSeconds) {
         if (serverSnap.realm !== 'MAIN') return;
-        for (const [px, py, s] of PALM_TREES) {
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
-          ctx.beginPath(); ctx.ellipse(px + 26 * s, py + 24 * s, 36 * s, 20 * s, 0.35, 0, Math.PI * 2); ctx.fill();
-          ctx.strokeStyle = '#92400e'; ctx.lineWidth = 9 * s;
-          ctx.beginPath(); ctx.moveTo(px, py + 14 * s); ctx.lineTo(px, py - 44 * s); ctx.stroke();
-          ctx.fillStyle = '#15803d';
-          for (let a = 0; a < 5; a++) {
-            const ang = (a / 5) * Math.PI * 2 + 0.3;
-            ctx.save(); ctx.translate(px, py - 44 * s); ctx.rotate(ang);
-            ctx.beginPath(); ctx.ellipse(22 * s, 0, 24 * s, 8 * s, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        for (const tree of (serverSnap.walls || []).filter(wall => wall.type === 'tree')) {
+          const px = tree.x + tree.w / 2;
+          const groundY = tree.y + tree.h;
+          const sway = Math.sin(nowSeconds * 1.3 + px) * 0.035;
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
+          ctx.beginPath();
+          ctx.ellipse(px + 9, groundY + 3, 29, 12, 0.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.save();
+          ctx.translate(px, groundY - 5);
+          ctx.rotate(sway);
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = '#56351f';
+          ctx.lineWidth = 13;
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-3, -28, 1, -57); ctx.stroke();
+          ctx.strokeStyle = '#a86d3d';
+          ctx.lineWidth = 6;
+          ctx.beginPath(); ctx.moveTo(-1, -4); ctx.quadraticCurveTo(-2, -29, 1, -54); ctx.stroke();
+          ctx.strokeStyle = '#704629';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(-4, -18); ctx.lineTo(3, -21);
+          ctx.moveTo(-3, -31); ctx.lineTo(4, -34);
+          ctx.stroke();
+
+          const crownY = -59;
+          const fronds = [
+            { x: -27, y: -3, rx: 30, ry: 10, angle: -0.5, color: '#236443' },
+            { x: 27, y: -4, rx: 30, ry: 10, angle: 0.5, color: '#2f8050' },
+            { x: -15, y: -17, rx: 29, ry: 10, angle: -0.9, color: '#347d49' },
+            { x: 16, y: -17, rx: 29, ry: 10, angle: 0.9, color: '#45a05d' },
+            { x: 0, y: -23, rx: 27, ry: 11, angle: 0, color: '#55ae63' },
+            { x: 0, y: 1, rx: 21, ry: 11, angle: Math.PI / 2, color: '#397b47' }
+          ];
+          for (const frond of fronds) {
+            ctx.fillStyle = frond.color;
+            ctx.beginPath();
+            ctx.ellipse(frond.x, crownY + frond.y, frond.rx, frond.ry, frond.angle, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(192, 230, 143, .46)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, crownY);
+            ctx.lineTo(frond.x, crownY + frond.y);
+            ctx.stroke();
           }
+          ctx.fillStyle = '#8f542b';
+          ctx.beginPath(); ctx.arc(0, crownY, 8, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
         }
       }
 
@@ -1770,6 +2246,7 @@
 
       window.addEventListener('keydown', e => {
         keys[e.code] = true;
+        if (e.repeat && (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) return;
         if (e.code === 'Escape' && activeModal === 'INSTRUCTIONS') { closeInstructions(); return; }
         if (e.code === 'Escape' && activeModal) { closeModals(); return; }
         if (e.code === 'KeyP' && serverSnap
@@ -1785,9 +2262,27 @@
         if (!serverSnap || serverSnap.mode !== 'PLAYING' || activeModal) return;
 
         if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
-          e.preventDefault(); sendActionToJava('DASH');
+          e.preventDefault();
+          if (clientPlayer && clientDashSeconds <= 0 && clientDashCooldown <= 0) {
+            let dx = (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0)
+              - (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0);
+            let dy = (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0)
+              - (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0);
+            if (dx === 0 && dy === 0) {
+              const p = getRenderedPlayer();
+              dx = Math.cos(p.aimAngle);
+              dy = Math.sin(p.aimAngle);
+            }
+            const length = Math.hypot(dx, dy) || 1;
+            clientDashX = dx / length;
+            clientDashY = dy / length;
+            clientDashSeconds = 0.18;
+            clientDashCooldown = 0.5;
+            awaitingDashResult = true;
+          }
+          sendActionToJava('DASH');
         } else if (e.code === 'KeyE') {
-          const p = serverSnap.player;
+          const p = getRenderedPlayer();
           if (Math.hypot(p.x - 440, p.y - 1550) <= 82) { openArmory(); return; }
           if (Math.hypot(p.x - 640, p.y - 1550) <= 82) { openForge(); return; }
           sendActionToJava('INTERACT');
@@ -1805,7 +2300,11 @@
       canvas.addEventListener('mousedown', e => {
         if (e.button === 0) {
           mouse.down = true;
-          if (serverSnap && serverSnap.mode === 'PLAYING' && !activeModal) sendActionToJava('FIRE');
+          if (serverSnap && serverSnap.mode === 'PLAYING' && !activeModal) {
+            playSound('fire');
+            lastShotSoundAt = performance.now();
+            sendActionToJava('FIRE');
+          }
         }
       });
       window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
@@ -1817,6 +2316,9 @@
         startingGame = true;
         sessionRevision++;
         serverSnap = null;
+        clientPlayer = null;
+        enemyVisuals.clear();
+        projectileVisuals.clear();
         latestEventId = 0;
         endShown = false;
         camX = 0;
@@ -1827,6 +2329,7 @@
         document.getElementById('pauseModal').classList.remove('flex');
         activeModal = null;
         try {
+          ensureAudio();
           const response = await fetch('/api/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1862,12 +2365,29 @@
       document.getElementById('btnCloseArmory').onclick = closeModals;
       document.getElementById('btnCloseForge').onclick = closeModals;
       document.getElementById('btnCloseInstructions').onclick = closeInstructions;
+      document.getElementById('audioToggle').onclick = () => {
+        audioEnabled = !audioEnabled;
+        updateAudioToggle();
+        if (audioEnabled) {
+          ensureAudio();
+        } else if (audioContext && audioContext.state === 'running') {
+          if (musicTimer) {
+            clearInterval(musicTimer);
+            musicTimer = null;
+          }
+          audioContext.suspend();
+        }
+      };
 
       buildDifficultyUI();
+      updateAudioToggle();
       setInterval(pollJavaState, 50);
       setInterval(sendInputToJava, 33);
 
       function loop(ts) {
+        const dt = lastFrameMs === 0 ? 0 : Math.min((ts - lastFrameMs) / 1000, 0.05);
+        lastFrameMs = ts;
+        updateClientSimulation(dt, ts);
         render(ts / 1000);
         requestAnimationFrame(loop);
       }
