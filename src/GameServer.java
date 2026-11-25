@@ -65,6 +65,29 @@ public class GameServer {
     private class StaticHtmlHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            if ("/Screenshot_2026-11-25_at_6.07.46_PM-removebg-preview.png"
+                    .equals(exchange.getRequestURI().getPath())) {
+                File spriteFile = new File("Screenshot_2026-11-25_at_6.07.46_PM-removebg-preview.png");
+                if (!spriteFile.exists()) {
+                    spriteFile = new File("../Screenshot_2026-11-25_at_6.07.46_PM-removebg-preview.png");
+                }
+                if (!spriteFile.exists()) {
+                    byte[] msg = "Missing player sprite image".getBytes(StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(404, msg.length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(msg);
+                    }
+                    return;
+                }
+                byte[] bytes = readAllBytes(spriteFile);
+                exchange.getResponseHeaders().set("Content-Type", "image/png");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                }
+                return;
+            }
+
             File htmlFile = new File("web/index.html");
             if (!htmlFile.exists()) {
                 htmlFile = new File("../web/index.html");

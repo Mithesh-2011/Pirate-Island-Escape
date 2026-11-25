@@ -823,6 +823,9 @@
 
       let selectedDiffIdx = 1;
       let serverSnap = null;
+      const playerSprite = new Image();
+      playerSprite.src = '/Screenshot_2026-11-25_at_6.07.46_PM-removebg-preview.png';
+      playerSprite.onerror = () => console.error('Unable to load the player sprite image.');
       let activeModal = null;
       let endShown = false;
       let camX = 0, camY = 0;
@@ -2248,141 +2251,31 @@
 
       function drawLuffy(p) {
         const bobY = Math.sin(p.walkBob) * 2.5;
-        ctx.fillStyle = 'rgba(44, 13, 10, .38)';
-        ctx.beginPath(); ctx.ellipse(p.x + 2, p.y + 17, 25, 10, 0, 0, Math.PI * 2); ctx.fill();
         ctx.save();
         ctx.translate(p.x, p.y + bobY);
-
-        ctx.fillStyle = '#641e1a';
         ctx.beginPath();
-        ctx.moveTo(-19, 25);
-        ctx.quadraticCurveTo(-19, 8, -9, 7);
-        ctx.quadraticCurveTo(0, 4, 9, 7);
-        ctx.quadraticCurveTo(19, 8, 19, 25);
-        ctx.quadraticCurveTo(0, 34, -19, 25);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#d92f2c';
-        ctx.beginPath();
-        ctx.moveTo(-15, 23);
-        ctx.quadraticCurveTo(-15, 10, -8, 9);
-        ctx.quadraticCurveTo(0, 7, 8, 9);
-        ctx.quadraticCurveTo(15, 10, 15, 23);
-        ctx.quadraticCurveTo(0, 30, -15, 23);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#f2c59a';
-        ctx.beginPath();
-        ctx.moveTo(-5, 5); ctx.lineTo(0, 16); ctx.lineTo(5, 5); ctx.closePath();
-        ctx.fill();
-
-        ctx.fillStyle = '#edbd8e';
-        ctx.beginPath();
-        ctx.ellipse(0, -3, 12, 13, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#47251e';
-        ctx.lineWidth = 1.8;
-        ctx.stroke();
-
-        ctx.fillStyle = '#15141c';
-        ctx.beginPath();
-        ctx.ellipse(-4.5, -4, 1.4, 1.8, 0, 0, Math.PI * 2);
-        ctx.ellipse(4.5, -4, 1.4, 1.8, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#4d211b';
-        ctx.beginPath();
-        ctx.moveTo(-8, 0);
-        ctx.quadraticCurveTo(0, 11, 8, 0);
-        ctx.quadraticCurveTo(0, 5, -8, 0);
-        ctx.fill();
-        ctx.fillStyle = '#fff8e9';
-        ctx.beginPath();
-        ctx.moveTo(-6, 1);
-        ctx.quadraticCurveTo(0, 8, 6, 1);
-        ctx.quadraticCurveTo(0, 4, -6, 1);
-        ctx.fill();
-        ctx.strokeStyle = '#68402d';
-        ctx.lineWidth = 0.8;
-        ctx.beginPath();
-        ctx.moveTo(-2, 2); ctx.lineTo(-2, 6);
-        ctx.moveTo(2, 2); ctx.lineTo(2, 6);
-        ctx.stroke();
-        ctx.strokeStyle = '#81352c';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(5, -1); ctx.lineTo(9, -2);
-        ctx.moveTo(7, -3); ctx.lineTo(7, 0);
-        ctx.moveTo(9, -3); ctx.lineTo(9, -1);
-        ctx.stroke();
-
-        ctx.fillStyle = '#4a2718';
-        ctx.beginPath();
-        ctx.ellipse(0, -14, 27, 8, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#f4c94f';
-        ctx.beginPath();
-        ctx.ellipse(0, -14, 25, 6, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#503019';
-        ctx.lineWidth = 1.8;
-        ctx.stroke();
-
-        ctx.fillStyle = '#f8ce35';
-        ctx.beginPath();
-        ctx.moveTo(-13, -15);
-        ctx.lineTo(-11, -21);
-        ctx.quadraticCurveTo(-9, -28, 0, -28);
-        ctx.quadraticCurveTo(9, -28, 11, -21);
-        ctx.lineTo(13, -15);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = '#38221b';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.fillStyle = '#d92525';
-        ctx.fillRect(-12, -19, 24, 3.5);
-        ctx.strokeStyle = '#38221b';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(-12, -19, 24, 3.5);
+        ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+        ctx.clip();
+        if (playerSprite.complete && playerSprite.naturalWidth > 0) {
+          const spriteSize = p.radius * 2.4;
+          ctx.drawImage(playerSprite, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
+        }
         ctx.restore();
 
         if (!(p.x >= 310 && p.x <= 790 && p.y >= 1000 && p.y <= 1600)) {
+          const muzzleX = p.x + Math.cos(p.aimAngle) * p.radius;
+          const muzzleY = p.y + bobY + Math.sin(p.aimAngle) * p.radius;
           ctx.save();
-          ctx.translate(p.x + 14, p.y + bobY + 8);
-          ctx.strokeStyle = '#641e1a';
-          ctx.lineWidth = 8;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(-7, -1); ctx.lineTo(1, 1);
-          ctx.stroke();
-          ctx.strokeStyle = '#d92f2c';
-          ctx.lineWidth = 5;
-          ctx.beginPath();
-          ctx.moveTo(-7, -1); ctx.lineTo(1, 1);
-          ctx.stroke();
-          ctx.fillStyle = '#edbd8e';
-          ctx.beginPath();
-          ctx.arc(2, 1, 4, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#47251e';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.translate(2, 1);
+          ctx.translate(muzzleX, muzzleY);
           ctx.rotate(p.aimAngle);
-          ctx.strokeStyle = '#55321f';
-          ctx.lineWidth = 4;
+          ctx.fillStyle = '#080b10';
           ctx.beginPath();
-          ctx.moveTo(0, 0); ctx.lineTo(13, 0);
-          ctx.stroke();
-          ctx.fillStyle = '#55321f';
-          ctx.beginPath();
-          ctx.roundRect(12, -2.5, 14, 5, 1.5);
+          ctx.arc(0, 0, 5, 0, Math.PI * 2);
           ctx.fill();
-          ctx.fillStyle = '#b53a2b';
-          ctx.fillRect(15, -1.5, 8, 2);
-          ctx.fillStyle = '#d2a35a';
-          ctx.fillRect(12, -2, 2, 4);
-          ctx.fillRect(17, 2, 3, 5);
+          ctx.fillStyle = '#7dd3fc';
+          ctx.beginPath();
+          ctx.arc(7.5, 0, 2, 0, Math.PI * 2);
+          ctx.fill();
           ctx.restore();
         }
       }

@@ -715,8 +715,9 @@ public class GameEngine {
 
         w.consumeShot();
         int scaledDmg = (int) Math.round(w.getScaledDamage() * player.getDamageMultiplier());
-        double mx = player.getX() + 16.0 + Math.cos(player.getAimAngle()) * 26.0;
-        double my = player.getY() + 9.0 + Math.sin(player.getAimAngle()) * 26.0;
+        double muzzleDistance = player.getRadius() + 7.5;
+        double mx = player.getX() + Math.cos(player.getAimAngle()) * muzzleDistance;
+        double my = player.getY() + Math.sin(player.getAimAngle()) * muzzleDistance;
 
         int pellets = w.getPelletCount();
         for (int i = 0; i < pellets; i++) {

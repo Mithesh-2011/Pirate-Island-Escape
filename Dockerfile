@@ -8,6 +8,7 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/out ./out
 COPY --from=build /app/web ./web
+COPY Screenshot_2026-11-25_at_6.07.46_PM-removebg-preview.png ./
 ENV PORT=8080
 EXPOSE 8080
 CMD ["java", "-cp", "out", "Main"]

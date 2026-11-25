@@ -110,8 +110,10 @@ public class BoundaryTestSuite {
         assertCondition("FIRED".equals(muzzleEngine.executePlayerAction("FIRE", 0, firingAngle)),
                 "A shot uses the latest pointer aim angle");
         Projectile muzzleShot = muzzleEngine.getProjectiles().get(0);
-        assertCondition(Math.abs(muzzleShot.getX() - 916) < 0.1
-                        && Math.abs(muzzleShot.getY() - 1335) < 0.1,
+        double expectedMuzzleDistance = muzzleEngine.getPlayer().getRadius() + 7.5;
+        assertCondition(muzzleEngine.getPlayer().getRadius() == 25.0
+                        && Math.abs(muzzleShot.getX() - (900 + Math.cos(firingAngle) * expectedMuzzleDistance)) < 0.1
+                        && Math.abs(muzzleShot.getY() - (1300 + Math.sin(firingAngle) * expectedMuzzleDistance)) < 0.1,
                 "Projectile starts at the player's visible weapon muzzle");
         Projectile browserMovedProjectile = weaponEnergyEngine.getProjectiles().get(0);
         double projectileStartX = browserMovedProjectile.getX();

@@ -32,7 +32,7 @@ public class Player {
         this.captainCallsign = formatCaptainCallsign(rawCallsign);
         this.x = startX;
         this.y = startY;
-        this.radius = 20.0;
+        this.radius = 25.0;
         this.hp = 100.0;
         this.maxHp = 100.0;
         this.energy = 100.0;
