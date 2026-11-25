@@ -13,6 +13,8 @@ public class Player {
     private int berries;
     private int greenLogPoses;
     private int goldKeycards;
+    private int imuKeycards;
+    private boolean escapeKey;
     private boolean gear5Active;
     private double aimAngle;
     private double walkBob;
@@ -38,6 +40,8 @@ public class Player {
         this.berries = 0;
         this.greenLogPoses = 0;
         this.goldKeycards = 0;
+        this.imuKeycards = 0;
+        this.escapeKey = false;
         this.gear5Active = false;
         this.aimAngle = 0.0;
         this.walkBob = 0.0;
@@ -207,6 +211,9 @@ public class Player {
     public void spendGreenLogPoses(int amount) { greenLogPoses = Math.max(0, greenLogPoses - amount); }
     public void addGoldKeycard() { goldKeycards = Math.min(3, goldKeycards + 1); }
     public void spendGoldKeycards(int amount) { goldKeycards = Math.max(0, goldKeycards - amount); }
+    public void addImuKeycard() { imuKeycards = Math.min(1, imuKeycards + 1); }
+    public void spendImuKeycards(int amount) { imuKeycards = Math.max(0, imuKeycards - amount); }
+    public void addEscapeKey() { escapeKey = true; }
 
     public void setPosition(double nx, double ny) { this.x = nx; this.y = ny; }
     public void setAimAngle(double angle) { this.aimAngle = angle; }
@@ -235,6 +242,8 @@ public class Player {
     public int getBerries() { return berries; }
     public int getGreenLogPoses() { return greenLogPoses; }
     public int getGoldKeycards() { return goldKeycards; }
+    public int getImuKeycards() { return imuKeycards; }
+    public boolean hasEscapeKey() { return escapeKey; }
     public boolean hasGear5() { return gear5Active; }
     public double getDamageMultiplier() { return gear5Active ? 1.4 : 1.0; }
     public double getAimAngle() { return aimAngle; }

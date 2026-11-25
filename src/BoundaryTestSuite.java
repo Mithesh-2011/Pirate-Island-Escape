@@ -34,7 +34,8 @@ public class BoundaryTestSuite {
 
         GameEngine imuLaserEngine = new GameEngine();
         imuLaserEngine.resetGame("Normal", "Boss Laser Test");
-        imuLaserEngine.getPlayer().setPosition(5140, 1300);
+        imuLaserEngine.getPlayer().setPosition(5100, 1300);
+        imuLaserEngine.getPlayer().addImuKeycard();
         assertCondition("PORTAL_TRAVELLED".equals(imuLaserEngine.executePlayerAction("INTERACT", 0)),
                 "Boss laser test enters the Empty Throne realm");
         for (int i = 0; i < 240; i++) {
@@ -63,6 +64,17 @@ public class BoundaryTestSuite {
                 && weaponEnergyEngine.getPlayer().getEnergy()
                         == energyBeforeShot - Weapon.ENERGY_COST_PER_SHOT,
                 "Firing a weapon consumes energy");
+        GameEngine reloadingWeaponEngine = new GameEngine();
+        reloadingWeaponEngine.resetGame("Normal", "Reload Fire Test");
+        reloadingWeaponEngine.getPlayer().setPosition(1000, 1300);
+        Weapon reloadingWeapon = reloadingWeaponEngine.getPlayer().getEquippedWeapon();
+        reloadingWeapon.consumeShot();
+        reloadingWeapon.startReload();
+        int reloadAmmo = reloadingWeapon.getCurrentAmmo();
+        assertCondition("RELOADING".equals(reloadingWeaponEngine.executePlayerAction("FIRE", 0))
+                        && reloadingWeaponEngine.getProjectiles().isEmpty()
+                        && reloadingWeapon.getCurrentAmmo() == reloadAmmo,
+                "Firing during reload is rejected without consuming ammo or creating a shot");
         assertCondition(weaponEnergyEngine.toJsonSnapshot().contains("\"energyCost\":1.0"),
                 "Weapon energy costs are included in the game snapshot");
         String movementSnapshot = weaponEnergyEngine.toJsonSnapshot();
@@ -72,6 +84,22 @@ public class BoundaryTestSuite {
                         && movementSnapshot.contains("\"vx\":")
                         && movementSnapshot.contains("\"vy\":"),
                 "Snapshots include the movement data used by the browser renderer");
+        Projectile browserMovedProjectile = weaponEnergyEngine.getProjectiles().get(0);
+        double projectileStartX = browserMovedProjectile.getX();
+        weaponEnergyEngine.tick(0.1);
+        assertCondition(browserMovedProjectile.getX() == projectileStartX,
+                "The Java tick leaves projectile movement to the browser");
+        GameEngine browserPlayerMovementEngine = new GameEngine();
+        browserPlayerMovementEngine.resetGame("Normal", "Browser Movement Test");
+        double playerStartX = browserPlayerMovementEngine.getPlayer().getX();
+        browserPlayerMovementEngine.updateInputState(false, false, false, true, false, 0);
+        browserPlayerMovementEngine.tick(0.1);
+        assertCondition(browserPlayerMovementEngine.getPlayer().getX() == playerStartX,
+                "The Java tick leaves player movement to the browser");
+        browserPlayerMovementEngine.updateClientMovement(playerStartX + 6, 1300,
+                java.util.Collections.emptyMap(), java.util.Collections.emptyMap());
+        assertCondition(browserPlayerMovementEngine.getPlayer().getX() == playerStartX + 6,
+                "Client player positions synchronize to Java for collision checks");
         GameEngine safeHarborWeaponEngine = new GameEngine();
         safeHarborWeaponEngine.resetGame("Normal", "Safe Harbor Weapon Test");
         Weapon harborWeapon = safeHarborWeaponEngine.getPlayer().getEquippedWeapon();
@@ -112,9 +140,24 @@ public class BoundaryTestSuite {
                 .filter(PirateEnemy::isBoss).findFirst().orElseThrow();
         replayBoss.takeDamage(replayBoss.getHp());
         replayEngine.handleEnemyDefeated(replayBoss, 0.99);
-        replayEngine.getPlayer().setPosition(375, 1300);
+        assertCondition(replayEngine.getLootDrops().stream()
+                        .anyMatch(drop -> "ESCAPE_KEY".equals(drop.getType()))
+                        && replayEngine.toJsonSnapshot().contains("\"escapeKey\":false")
+                        && replayEngine.toJsonSnapshot().contains("IMU DEFEATED! GET TO THE SHIP!"),
+                "Defeating IMU drops a physical Escape Key and signals the return to ship");
+        replayEngine.getPlayer().setPosition(450, 1300);
+        assertCondition("NO_ESCAPE_KEY".equals(replayEngine.executePlayerAction("INTERACT", 0)),
+                "The ship cannot be activated without collecting the Escape Key");
+        LootDrop escapeKey = replayEngine.getLootDrops().stream()
+                .filter(drop -> "ESCAPE_KEY".equals(drop.getType())).findFirst().orElseThrow();
+        replayEngine.getPlayer().setPosition(escapeKey.getX(), escapeKey.getY());
+        replayEngine.tick(1.0 / 60.0);
+        assertCondition(replayEngine.getPlayer().hasEscapeKey()
+                        && replayEngine.toJsonSnapshot().contains("\"escapeKey\":true"),
+                "Collecting IMU's Escape Key enables the ship");
+        replayEngine.getPlayer().setPosition(450, 1300);
         assertCondition("VICTORY".equals(replayEngine.executePlayerAction("INTERACT", 0)),
-                "Winning a run reaches the victory state");
+                "Pressing E at the ship with the Escape Key wins the run");
         replayEngine.resetGame("Hard", "Replay Test");
         assertCondition("PLAYING".equals(replayEngine.getGameMode())
                 && replayEngine.getPlayer().getHp() == replayEngine.getPlayer().getMaxHp()
@@ -129,9 +172,9 @@ public class BoundaryTestSuite {
         GameEngine sectionEngine = new GameEngine();
         sectionEngine.resetGame("Normal", "Section Count Test");
         assertCondition(hasExactSectionEnemyCounts(sectionEngine, 2),
-                "Every surface section has exactly twice its Log Pose requirement in enemies");
+                "All five sections have the expected enemy counts");
         double[][] obstacleSections = {
-            {300, 1740}, {1778, 2690}, {2728, 3590}, {3628, 4540}, {4578, 5360}
+            {840, 1740}, {1778, 2690}, {2728, 3590}, {3628, 4540}, {4578, 5360}
         };
         boolean evenlySpacedObstacles = true;
         for (double[] sectionBounds : obstacleSections) {
@@ -146,15 +189,31 @@ public class BoundaryTestSuite {
                     .filter(wall -> wall.getX() >= sectionBounds[0]
                             && wall.getX() + wall.getWidth() <= sectionBounds[1])
                     .count();
-            evenlySpacedObstacles &= obstacleCount == 10 && treeCount == 5;
+            evenlySpacedObstacles &= obstacleCount == 20 && treeCount == 10;
         }
         assertCondition(evenlySpacedObstacles,
-                "Each section has ten evenly distributed crates and physical trees");
+                "All five sections have twenty alternating, staggered crates and trees");
+        boolean entitiesAvoidObstacles = sectionEngine.getEnemies().stream()
+                .allMatch(enemy -> !overlapsSectionObstacle(sectionEngine, enemy.getX(), enemy.getY(),
+                        enemy.getRadius()))
+                && sectionEngine.getChests().stream()
+                .allMatch(chest -> !overlapsSectionObstacle(sectionEngine, chest.getX(), chest.getY(), 36));
+        double[][] portalLocations = {
+            {2340, 1300}, {7100, 1500}, {7100, 1800},
+            {5100, 1300}, {9300, 1800}, {9600, 1900}
+        };
+        for (double[] portal : portalLocations) {
+            entitiesAvoidObstacles &= !overlapsSectionObstacle(sectionEngine, portal[0], portal[1], 48);
+        }
+        assertCondition(entitiesAvoidObstacles,
+                "Enemy, portal, and chest spawn locations stay clear of obstacles");
         WorldObstacle treeObstacle = sectionEngine.getWalls().stream()
                 .filter(wall -> "tree".equals(wall.getMaterialType())).findFirst().orElseThrow();
         double treeCenterX = treeObstacle.getX() + treeObstacle.getWidth() / 2.0;
         double treeCenterY = treeObstacle.getY() + treeObstacle.getHeight() / 2.0;
         sectionEngine.getPlayer().setPosition(treeCenterX, treeCenterY);
+        sectionEngine.updateClientMovement(treeCenterX + 1, treeCenterY,
+                java.util.Collections.emptyMap(), java.util.Collections.emptyMap());
         sectionEngine.tick(1.0 / 60.0);
         assertCondition(treeObstacle.containsPoint(treeCenterX, treeCenterY)
                         && !treeObstacle.containsPoint(sectionEngine.getPlayer().getX(),
@@ -168,7 +227,7 @@ public class BoundaryTestSuite {
         assertCondition(!boxObstacle.containsPoint(boxResolved[0], boxResolved[1]),
                 "Overlapping obstacle resolution moves entities fully out of boxes");
         assertCondition(hasChestInEveryMapSection(sectionEngine),
-                "Chests spawn in the harbor, all five surface sections, and throne area");
+                "Chests spawn in the harbor, all five sections, and throne area");
         PirateEnemy[] firstSectionEnemies = sectionEngine.getEnemies().stream()
                 .filter(enemy -> !enemy.isBoss() && enemy.getX() < 1740)
                 .limit(3).toArray(PirateEnemy[]::new);
@@ -203,7 +262,7 @@ public class BoundaryTestSuite {
                 && java.util.Arrays.stream(guardians).allMatch(enemy ->
                         enemy.getMaxHp() > ordinaryEnemy.getMaxHp()),
                 "Three harder, one-time Gold Key Guardians are isolated in their realm");
-        keyEngine.getPlayer().setPosition(2340, 1800);
+        keyEngine.getPlayer().setPosition(2340, 1300);
         assertCondition("PORTAL_TRAVELLED".equals(keyEngine.executePlayerAction("INTERACT", 0))
                 && "GOLD_KEY".equals(keyEngine.getCurrentRealm())
                 && keyEngine.toJsonSnapshot().contains("\"id\":\"gold_key_exit\"")
@@ -332,6 +391,10 @@ public class BoundaryTestSuite {
                 enemy.getX() == defeatedPirateX && enemy.getY() == defeatedPirateY
                         && enemy.getId() != defeatedPirateId && enemy.isAlive()),
                 "Defeated pirates respawn after three minutes");
+        assertCondition(respawnEngine.getEnemies().stream()
+                        .allMatch(enemy -> !overlapsSectionObstacle(respawnEngine,
+                                enemy.getX(), enemy.getY(), enemy.getRadius())),
+                "Respawned enemies remain clear of obstacles");
 
         GameEngine gateEngine = new GameEngine();
         gateEngine.resetGame("Normal", "Gate Test");
@@ -341,13 +404,18 @@ public class BoundaryTestSuite {
         for (int i = 0; i < 120; i++) {
             gateEngine.tick(1.0 / 60.0);
         }
+        assertCondition(gateEnemy.getX() == 1700,
+                "The Java tick no longer simulates enemy movement");
+        gateEngine.updateClientMovement(gateEngine.getPlayer().getX(), gateEngine.getPlayer().getY(),
+                java.util.Map.of(gateEnemy.getId(), new double[]{1920, 1300}),
+                java.util.Collections.emptyMap());
         assertCondition(gateEnemy.getX() + gateEnemy.getRadius() <=
                 gateEngine.getGates().get(0).getX() + 0.01,
-                "Enemies cannot cross a closed sector gate");
+                "Client enemy positions are still constrained by closed gates");
         gateEngine.getGates().get(0).setOpened(true);
-        for (int i = 0; i < 180; i++) {
-            gateEngine.tick(1.0 / 60.0);
-        }
+        gateEngine.updateClientMovement(gateEngine.getPlayer().getX(), gateEngine.getPlayer().getY(),
+                java.util.Map.of(gateEnemy.getId(), new double[]{1920, 1300}),
+                java.util.Collections.emptyMap());
         assertCondition(gateEnemy.getX() > gateEngine.getGates().get(0).getX()
                 + gateEngine.getGates().get(0).getWidth(),
                 "Enemies can cross an opened sector gate");
@@ -392,7 +460,10 @@ public class BoundaryTestSuite {
                 .filter(PirateEnemy::isBoss).findFirst().orElseThrow();
         assertCondition(portalBoss.getX() > 8700 && portalBoss.getY() < 2200,
                 "IMU is isolated in the Empty Throne realm");
-        portalBossEngine.getPlayer().setPosition(5140, 1300);
+        portalBossEngine.getPlayer().setPosition(5100, 1300);
+        assertCondition("GATE_LOCKED".equals(portalBossEngine.executePlayerAction("INTERACT", 0)),
+                "The IMU portal stays locked until the section 5 keycard is collected");
+        portalBossEngine.getPlayer().addImuKeycard();
         assertCondition("PORTAL_TRAVELLED".equals(portalBossEngine.executePlayerAction("INTERACT", 0))
                 && "IMU".equals(portalBossEngine.getCurrentRealm())
                 && portalBossEngine.toJsonSnapshot().contains("\"id\":\"imu_exit\"")
@@ -401,11 +472,39 @@ public class BoundaryTestSuite {
         portalBossEngine.getPlayer().setPosition(9600, 1900);
         assertCondition("PORTAL_TRAVELLED".equals(portalBossEngine.executePlayerAction("INTERACT", 0))
                 && "MAIN".equals(portalBossEngine.getCurrentRealm())
-                && portalBossEngine.getPlayer().getX() == 5140,
+                && portalBossEngine.getPlayer().getX() == 5100,
                 "The IMU realm portal returns to section 5");
         assertCondition(returnEngine.toJsonSnapshot().contains("\"portals\":[")
                 && returnEngine.toJsonSnapshot().contains("\"realm\":\"MAIN\""),
                 "Realm and portal state are included in the game snapshot");
+
+        GameEngine imuKeycardEngine = new GameEngine();
+        imuKeycardEngine.resetGame("Normal", "IMU Keycard Test");
+        PirateEnemy keycardCarrier = imuKeycardEngine.getEnemies().stream()
+                .filter(PirateEnemy::isImuKeycardCarrier).findFirst().orElseThrow();
+        assertCondition(keycardCarrier.getX() >= 4578 && keycardCarrier.getX() < 5360
+                        && imuKeycardEngine.getEnemies().stream()
+                                .noneMatch(enemy -> enemy.getX() >= 5360 && enemy.getX() < 6200),
+                "The keycard carrier is in the fifth and final section");
+        keycardCarrier.takeDamage(keycardCarrier.getHp());
+        imuKeycardEngine.handleEnemyDefeated(keycardCarrier, 0.99);
+        imuKeycardEngine.tick(1.0 / 60.0);
+        assertCondition(imuKeycardEngine.getLootDrops().stream()
+                        .anyMatch(drop -> "IMU_KEYCARD".equals(drop.getType()))
+                        && imuKeycardEngine.getEnemies().stream()
+                                .noneMatch(enemy -> enemy.getId() == keycardCarrier.getId()),
+                "The one-time section-five carrier drops an IMU Keycard");
+        LootDrop imuCard = imuKeycardEngine.getLootDrops().stream()
+                .filter(drop -> "IMU_KEYCARD".equals(drop.getType())).findFirst().orElseThrow();
+        imuKeycardEngine.getPlayer().setPosition(imuCard.getX(), imuCard.getY());
+        imuKeycardEngine.tick(1.0 / 60.0);
+        assertCondition(imuKeycardEngine.getPlayer().getImuKeycards() == 1
+                        && imuKeycardEngine.toJsonSnapshot().contains("\"imuKeycards\":1"),
+                "Collecting the special drop adds the IMU Keycard to inventory");
+        imuKeycardEngine.getPlayer().setPosition(5100, 1300);
+        assertCondition("PORTAL_TRAVELLED".equals(imuKeycardEngine.executePlayerAction("INTERACT", 0))
+                        && imuKeycardEngine.getPlayer().getImuKeycards() == 0,
+                "The special keycard unlocks the IMU portal in section five");
 
         GameEngine harborEngine = new GameEngine();
         harborEngine.resetGame("Normal", "Safe Harbor Test");
@@ -479,12 +578,9 @@ public class BoundaryTestSuite {
                 "Chests spawn again after restarting a run");
         chestEngine.resetGame("Expert", "Game Over Chest Spawn Test");
         chestEngine.getPlayer().setPosition(1300, 1100);
-        PirateEnemy gameOverEnemy = chestEngine.getEnemies().get(0);
-        gameOverEnemy.setPosition(1340, 1100);
-        gameOverEnemy.tickTimers(5.0);
-        for (int i = 0; i < 600 && "PLAYING".equals(chestEngine.getGameMode()); i++) {
-            chestEngine.tick(1.0 / 60.0);
-        }
+        chestEngine.getProjectiles().add(new Projectile(1300, 1100, 0, 0, 10,
+                1000, 1.0, false, false, "#f87171", "#f87171"));
+        chestEngine.tick(1.0 / 60.0);
         assertCondition("DEFEAT".equals(chestEngine.getGameMode()),
                 "Test run reaches game over before restarting");
         chestEngine.resetGame("Normal", "Post Game Over Chest Spawn Test");
@@ -534,7 +630,8 @@ public class BoundaryTestSuite {
                             && enemy.getY() < 2140
                             && enemy.getX() >= sectionStart && enemy.getX() < sectionEnd)
                     .count();
-            if (enemiesInSection != 2L * gateRequirement) {
+            long expectedCount = 2L * gateRequirement;
+            if (enemiesInSection != expectedCount) {
                 return false;
             }
         }
@@ -560,5 +657,18 @@ public class BoundaryTestSuite {
                 chest.getX() >= 8700 && chest.getX() < 10600
                         && chest.getY() >= 600 && chest.getY() < 2200);
         return hasHarborChest && hasThroneChest;
+    }
+
+    private static boolean overlapsSectionObstacle(GameEngine engine, double x, double y, double radius) {
+        return engine.getWalls().stream()
+                .filter(wall -> "crate".equals(wall.getMaterialType())
+                        || "tree".equals(wall.getMaterialType()))
+                .anyMatch(wall -> {
+                    double closestX = Math.max(wall.getX(), Math.min(x, wall.getX() + wall.getWidth()));
+                    double closestY = Math.max(wall.getY(), Math.min(y, wall.getY() + wall.getHeight()));
+                    double dx = x - closestX;
+                    double dy = y - closestY;
+                    return dx * dx + dy * dy < radius * radius;
+                });
     }
 }

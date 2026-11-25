@@ -323,9 +323,9 @@
       background: rgba(140, 20, 17, .48) !important;
     }
     #startScreen section:last-child {
-      align-self: end;
+      align-self: center;
       min-height: 280px;
-      margin-bottom: 0;
+      margin-bottom: 28px;
       border: 1px solid rgba(255, 221, 188, .38) !important;
       background: rgba(140, 20, 17, .48) !important;
     }
@@ -392,7 +392,7 @@
       #startScreen .home-shell { min-height: 0; }
       .grand-line-hat { transform: scale(.72); margin: -32px auto -24px; }
       #startScreen section:first-child .mt-7.rounded-2xl { min-height: 0; }
-      #startScreen section:last-child { min-height: 0; }
+      #startScreen section:last-child { align-self: stretch; min-height: 0; margin-bottom: 0; }
     }
 
     :root {
@@ -521,12 +521,17 @@
             <span class="text-xs font-bold text-amber-300">GOLD KEYS:</span>
             <span id="hudGoldKeysText" class="font-mono-code text-sm font-extrabold text-amber-400">0/3</span>
           </div>
+          <div class="flex items-center gap-1.5 rounded-lg bg-rose-500/15 px-2.5 py-1 ring-1 ring-rose-500/40">
+            <span class="text-xs font-bold text-rose-300">IMU CARD:</span>
+            <span id="hudImuKeycardText" class="font-mono-code text-sm font-extrabold text-rose-300">0/1</span>
+          </div>
+          <span id="hudEscapeKeyBadge" class="hidden rounded-lg bg-amber-400/20 px-2.5 py-1 text-xs font-extrabold text-amber-200 ring-1 ring-amber-300/50">ESCAPE KEY</span>
           <span id="gear5HudBadge" class="hidden rounded-lg bg-rose-500/20 px-2.5 py-1 text-xs font-extrabold text-rose-300 ring-1 ring-rose-500/50">GEAR 5 ACTIVE</span>
         </div>
 
         <div class="flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-950/85 px-3.5 py-1 text-xs font-semibold shadow-md backdrop-blur-sm">
           <span id="hudZoneBadge" class="rounded-full bg-cyan-500/20 px-2 py-0.5 text-[11px] font-bold text-cyan-300">ZONE 0 - SAFE HARBOR</span>
-          <span id="hudBackendTag" class="font-mono-code text-[11px] text-emerald-400">Java 60Hz Sync</span>
+          <span id="hudBackendTag" class="font-mono-code text-[11px] text-emerald-400">Browser Movement</span>
           <span class="font-mono-code text-[11px] text-amber-300">B: return to base (1 Log Pose)</span>
         </div>
       </div>
@@ -576,7 +581,7 @@
           </div>
           <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[.2em] text-amber-200">
             <span class="h-2 w-2 rounded-full bg-amber-300 shadow-[0_0_12px_#fcd34d]"></span>
-            Island raid · Action adventure
+            Island adventure · Action adventure
           </div>
           <h1 class="font-display text-5xl font-extrabold leading-[.98] tracking-tight text-white sm:text-6xl lg:text-7xl">
             GRAND LINE
@@ -638,7 +643,7 @@
         </p>
 
         <button id="btnStartGame" class="mt-6 w-full rounded-xl bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400 px-5 py-3.5 font-display text-lg font-extrabold tracking-wide text-slate-950 shadow-[0_10px_35px_rgba(251,146,60,.2)] transition hover:-translate-y-0.5 hover:brightness-110">
-          BEGIN THE RAID <span class="ml-1">→</span>
+          BEGIN ADVENTURE <span class="ml-1">→</span>
         </button>
       </section>
     </div>
@@ -758,7 +763,7 @@
       };
 
       const STATIONS = [
-        { id: 'sunny_ship',      type: 'SHIP',          name: 'Thousand Sunny (Escape Ship)',       x: 375,  y: 1300, radius: 58, color: '#f59e0b' },
+        { id: 'sunny_ship',      type: 'SHIP',          name: 'Thousand Sunny (Escape Ship)',       x: 450,  y: 1300, radius: 58, color: '#f59e0b' },
         { id: 'armory_station',  type: 'ARMORY',        name: 'Armory Vending Machine',             x: 440,  y: 1550, radius: 36, color: '#c27a42' },
         { id: 'forge_station',   type: 'FORGE',         name: 'Rarity Forge Station',               x: 640,  y: 1550, radius: 36, color: '#a74433' },
         { id: 'secret_pedestal', type: 'GEAR5',         name: 'Gear 5 Energy Booster',               x: 3120, y: 540,  radius: 32, color: '#eab308' }
@@ -825,6 +830,7 @@
       const mouse = { x: viewportW / 2, y: viewportH / 2, down: false };
       const floatingTexts = [];
       let latestEventId = 0;
+      let bossReturnToastUntil = 0;
       let pollingState = false;
       let sendingInput = false;
       let sessionRevision = 0;
@@ -843,7 +849,7 @@
       let musicTimer = null;
       let musicStep = 0;
       let audioEnabled = true;
-      let lastShotSoundAt = 0;
+      let musicGain = null;
 
       async function pollJavaState() {
         if (pollingState || startingGame) return;
@@ -868,6 +874,15 @@
 
       function reconcileClientVisuals(data, previous) {
         const p = data.player;
+        const equippedWeapon = p.weapons[p.equippedIndex];
+        const previousWeapon = previous && previous.player.weapons[previous.player.equippedIndex];
+        if (previousWeapon && equippedWeapon
+            && previous.player.equippedIndex === p.equippedIndex
+            && !previousWeapon.reloading && equippedWeapon.ammo < previousWeapon.ammo) {
+          for (let shot = 0; shot < Math.min(3, previousWeapon.ammo - equippedWeapon.ammo); shot++) {
+            playSound('fire');
+          }
+        }
         if (!clientPlayer || !previous || data.realm !== previous.realm || previous.mode !== 'PLAYING') {
           clientPlayer = { x: p.x, y: p.y, walkBob: p.walkBob };
           clientDashSeconds = 0;
@@ -878,9 +893,6 @@
           if (error > 220) {
             clientPlayer.x = p.x;
             clientPlayer.y = p.y;
-          } else {
-            clientPlayer.x += (p.x - clientPlayer.x) * 0.25;
-            clientPlayer.y += (p.y - clientPlayer.y) * 0.25;
           }
           if (!keys['KeyW'] && !keys['KeyA'] && !keys['KeyS'] && !keys['KeyD']
               && !keys['ArrowUp'] && !keys['ArrowLeft'] && !keys['ArrowDown'] && !keys['ArrowRight']) {
@@ -898,9 +910,6 @@
           if (!visual || !previous || data.realm !== previous.realm
               || Math.hypot(enemy.x - visual.x, enemy.y - visual.y) > 180) {
             enemyVisuals.set(enemy.id, { x: enemy.x, y: enemy.y });
-          } else {
-            visual.x += (enemy.x - visual.x) * 0.2;
-            visual.y += (enemy.y - visual.y) * 0.2;
           }
         }
 
@@ -913,11 +922,14 @@
           const visual = projectileVisuals.get(projectile.id);
           if (!visual) {
             projectileVisuals.set(projectile.id, { x: projectile.x, y: projectile.y });
-          } else {
-            visual.x += (projectile.x - visual.x) * 0.45;
-            visual.y += (projectile.y - visual.y) * 0.45;
           }
         }
+      }
+
+      function serializePositions(positions) {
+        return Array.from(positions, ([id, position]) =>
+          `${id},${position.x.toFixed(1)},${position.y.toFixed(1)}`
+        ).join(';');
       }
 
       function getRenderedPlayer() {
@@ -973,7 +985,7 @@
         return { x, y };
       }
 
-      function updateClientSimulation(dt, nowMs) {
+      function updateClientSimulation(dt) {
         if (!serverSnap || serverSnap.mode !== 'PLAYING' || !clientPlayer || activeModal) return;
         clientDashCooldown = Math.max(0, clientDashCooldown - dt);
         let vx = (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0)
@@ -1052,10 +1064,6 @@
           visual.y += projectile.vy * dt;
         }
 
-        if (mouse.down && nowMs - lastShotSoundAt > 280) {
-          playSound('fire');
-          lastShotSoundAt = nowMs;
-        }
       }
 
       function ensureAudio() {
@@ -1067,6 +1075,9 @@
           audioMaster = audioContext.createGain();
           audioMaster.gain.value = 0.38;
           audioMaster.connect(audioContext.destination);
+          musicGain = audioContext.createGain();
+          musicGain.gain.value = 0.65;
+          musicGain.connect(audioMaster);
         }
         if (audioContext.state === 'suspended') {
           audioContext.resume().then(startMusic).catch(() => {});
@@ -1075,46 +1086,107 @@
         }
       }
 
-      function playTone(frequency, duration, waveform, volume, delay = 0) {
+      function playTone(frequency, duration, waveform, volume, delay = 0, destination = audioMaster) {
         if (!audioEnabled || !audioContext || !audioMaster) return;
         const start = audioContext.currentTime + delay;
         const oscillator = audioContext.createOscillator();
         const gain = audioContext.createGain();
         oscillator.type = waveform;
         oscillator.frequency.setValueAtTime(frequency, start);
+        if (waveform === 'triangle' || waveform === 'sine') {
+          oscillator.detune.setValueAtTime(-4, start);
+          oscillator.detune.linearRampToValueAtTime(4, start + duration);
+        }
         gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(Math.max(volume, 0.0002), start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(Math.max(volume, 0.0002), start + Math.min(0.035, duration * 0.25));
+        gain.gain.setValueAtTime(Math.max(volume, 0.0002), start + duration * 0.55);
         gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
         oscillator.connect(gain);
-        gain.connect(audioMaster);
+        gain.connect(destination);
         oscillator.start(start);
         oscillator.stop(start + duration + 0.02);
       }
 
+      function playNoise(duration, volume, filterType, frequency, delay = 0) {
+        if (!audioEnabled || !audioContext || audioContext.state !== 'running') return;
+        const start = audioContext.currentTime + delay;
+        const sampleCount = Math.max(1, Math.floor(audioContext.sampleRate * duration));
+        const buffer = audioContext.createBuffer(1, sampleCount, audioContext.sampleRate);
+        const samples = buffer.getChannelData(0);
+        for (let i = 0; i < sampleCount; i++) {
+          samples[i] = Math.random() * 2 - 1;
+        }
+        const source = audioContext.createBufferSource();
+        const filter = audioContext.createBiquadFilter();
+        const gain = audioContext.createGain();
+        source.buffer = buffer;
+        filter.type = filterType;
+        filter.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(Math.max(volume, 0.0002), start);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioMaster);
+        source.start(start);
+        source.stop(start + duration + 0.01);
+      }
+
       function startMusic() {
         if (!audioEnabled || !audioContext || musicTimer) return;
-        const notes = [220, 261.63, 329.63, 293.66, 196, 246.94, 293.66, 261.63];
+        const melody = [293.66, 349.23, 392, 440, 392, 349.23, 293.66, 261.63,
+          293.66, 392, 440, 523.25, 493.88, 440, 392, 349.23];
+        const bass = [146.83, 146.83, 174.61, 174.61, 196, 196, 130.81, 130.81];
+        const chordProgression = [
+          [293.66, 349.23, 440],
+          [261.63, 329.63, 392],
+          [196, 293.66, 392],
+          [220, 293.66, 440]
+        ];
         musicTimer = setInterval(() => {
           if (!audioEnabled || !audioContext || audioContext.state !== 'running') return;
-          const note = notes[musicStep % notes.length];
-          playTone(note, 0.72, 'sine', 0.035);
-          if (musicStep % 4 === 0) playTone(note / 2, 1.25, 'triangle', 0.025);
+          const step = musicStep % 16;
+          const chord = chordProgression[Math.floor(step / 4)];
+          playTone(melody[step], 0.25, 'triangle', 0.045, 0, musicGain || audioMaster);
+          if (step % 2 === 0) {
+            playTone(bass[Math.floor(step / 2) % bass.length], 0.42, 'sine', 0.07, 0, musicGain || audioMaster);
+          }
+          if (step % 4 === 0) {
+            chord.forEach(note => {
+              playTone(note, 0.92, 'sine', 0.018, 0, musicGain || audioMaster);
+            });
+            playTone(73.42, 0.24, 'sine', 0.09, 0, musicGain || audioMaster);
+            playNoise(0.12, 0.035, 'lowpass', 160, 0);
+          } else if (step % 4 === 2) {
+            playNoise(0.10, 0.025, 'highpass', 2400);
+          }
           musicStep++;
-        }, 720);
+        }, 268);
       }
 
       function playSound(kind) {
         if (!audioEnabled || !audioContext || audioContext.state !== 'running') return;
-        const sounds = {
-          fire: [520, 0.08, 'square', 0.07],
-          dash: [180, 0.22, 'sawtooth', 0.09],
-          interact: [660, 0.16, 'sine', 0.08],
-          reload: [340, 0.12, 'triangle', 0.07],
-          pickup: [880, 0.2, 'sine', 0.09],
-          hit: [120, 0.16, 'sawtooth', 0.12]
-        };
-        const sound = sounds[kind];
-        if (sound) playTone(sound[0], sound[1], sound[2], sound[3]);
+        if (kind === 'fire') {
+          playTone(190, 0.075, 'sawtooth', 0.045);
+          playTone(92, 0.11, 'triangle', 0.06);
+          playNoise(0.07, 0.035, 'lowpass', 1700);
+        } else if (kind === 'dash') {
+          playTone(520, 0.26, 'sawtooth', 0.045);
+          playTone(260, 0.34, 'triangle', 0.05, 0.035);
+          playNoise(0.20, 0.025, 'bandpass', 950);
+        } else if (kind === 'interact') {
+          [523.25, 659.25, 783.99].forEach((note, index) =>
+            playTone(note, 0.22, 'sine', 0.045, index * 0.055));
+        } else if (kind === 'reload') {
+          playTone(392, 0.10, 'triangle', 0.035);
+          playTone(523.25, 0.13, 'sine', 0.03, 0.12);
+          playTone(659.25, 0.18, 'sine', 0.035, 0.28);
+        } else if (kind === 'pickup') {
+          playTone(659.25, 0.15, 'sine', 0.04);
+          playTone(987.77, 0.22, 'triangle', 0.035, 0.07);
+        } else if (kind === 'hit') {
+          playTone(110, 0.20, 'sawtooth', 0.07);
+          playNoise(0.13, 0.045, 'lowpass', 500);
+        }
       }
 
       function updateAudioToggle() {
@@ -1134,15 +1206,22 @@
           left: !!(keys['KeyA'] || keys['ArrowLeft']),
           right: !!(keys['KeyD'] || keys['ArrowRight']),
           firing: !!mouse.down,
-          aimAngle: Number(aimAngle.toFixed(3))
+          aimAngle: Number(aimAngle.toFixed(3)),
+          playerX: Number(p.x.toFixed(1)),
+          playerY: Number(p.y.toFixed(1)),
+          enemyPositions: serializePositions(enemyVisuals),
+          projectilePositions: serializePositions(projectileVisuals)
         };
         try {
-          await fetch('/api/input', {
+          const response = await fetch('/api/input', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
           });
-        } catch (e) {}
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+        } catch (e) {
+          document.getElementById('serverWarningBanner').classList.remove('hidden');
+        }
         finally {
           sendingInput = false;
         }
@@ -1187,7 +1266,11 @@
         for (const ev of events) {
           if (ev.id > latestEventId) {
             latestEventId = ev.id;
-            if (ev.text.startsWith('+B') || ev.text.includes('LOG POSE') || ev.text.includes('GOLD KEY')) {
+            if (ev.text.includes('IMU DEFEATED! GET TO THE SHIP!')) {
+              bossReturnToastUntil = performance.now() + 6000;
+            }
+            if (ev.text.startsWith('+B') || ev.text.includes('LOG POSE')
+                || ev.text.includes('GOLD KEY') || ev.text.includes('ESCAPE KEY')) {
               playSound('pickup');
             } else if (ev.text.includes('HP')) {
               playSound('hit');
@@ -1219,6 +1302,8 @@
         document.getElementById('hudTimerText').textContent = formatTime(data.elapsedTime);
         document.getElementById('hudGreenKeysText').textContent = p.greenKeys;
         document.getElementById('hudGoldKeysText').textContent = `${p.goldKeys}/3`;
+        document.getElementById('hudImuKeycardText').textContent = `${p.imuKeycards}/1`;
+        document.getElementById('hudEscapeKeyBadge').classList.toggle('hidden', !p.escapeKey);
         document.getElementById('gear5HudBadge').classList.toggle('hidden', !p.gear5Active);
         document.getElementById('hudZoneBadge').textContent = data.zoneLabel;
 
@@ -1284,7 +1369,11 @@
           if (Math.hypot(p.x - st.x, p.y - st.y) <= st.radius + 46) {
             promptEl.classList.remove('hidden');
             promptEl.classList.add('flex');
-            textEl.textContent = st.name;
+            textEl.textContent = st.type === 'SHIP' && data.imuDefeated && p.escapeKey
+              ? 'Escape with the Thousand Sunny'
+              : st.type === 'SHIP' && data.imuDefeated
+                ? 'Return with IMU’s Escape Key'
+                : st.name;
             return;
           }
         }
@@ -1493,7 +1582,29 @@
         drawFloatingTexts();
 
         ctx.restore();
+        drawBossReturnToast();
 
+      }
+
+      function drawBossReturnToast() {
+        if (performance.now() >= bossReturnToastUntil) return;
+        const width = Math.min(360, viewportW - 32);
+        const x = (viewportW - width) / 2;
+        const y = 112;
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, .92)';
+        ctx.strokeStyle = 'rgba(251, 191, 36, .9)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(x, y, width, 42, 12);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fde68a';
+        ctx.font = '800 14px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('IMU defeated! Get to the ship!', viewportW / 2, y + 21);
+        ctx.restore();
       }
 
       function drawTerrain(p, realm, nowSec) {
@@ -1645,6 +1756,14 @@
 
       function drawStations(nowSec) {
         for (const st of STATIONS) {
+          if (st.type === 'SHIP') {
+            drawThousandSunny(st, nowSec);
+            ctx.font = '700 11px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(st.name, st.x, st.y - 64);
+            continue;
+          }
           const pulse = 1 + Math.sin(nowSec * 4) * 0.08;
           ctx.beginPath();
           ctx.arc(st.x, st.y, st.radius * pulse, 0, Math.PI * 2);
@@ -1654,30 +1773,127 @@
           ctx.strokeStyle = st.color;
           ctx.stroke();
 
-          if (st.type === 'SHIP') {
-            ctx.fillStyle = '#713b2c';
-            ctx.beginPath(); ctx.moveTo(st.x - 42, st.y - 44); ctx.lineTo(st.x + 42, st.y - 44);
-            ctx.lineTo(st.x + 28, st.y + 55); ctx.lineTo(st.x, st.y + 78);
-            ctx.lineTo(st.x - 30, st.y + 55); ctx.closePath(); ctx.fill();
-            ctx.strokeStyle = '#d7a45e'; ctx.lineWidth = 4;
-            ctx.beginPath(); ctx.moveTo(st.x, st.y - 84); ctx.lineTo(st.x, st.y + 60); ctx.stroke();
-            ctx.fillStyle = '#f0dfc0';
-            ctx.beginPath(); ctx.moveTo(st.x + 4, st.y - 76); ctx.lineTo(st.x + 38, st.y - 26);
-            ctx.lineTo(st.x + 4, st.y - 22); ctx.closePath(); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(st.x - 4, st.y - 60); ctx.lineTo(st.x - 31, st.y - 20);
-            ctx.lineTo(st.x - 4, st.y - 18); ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#e5a82f';
-            ctx.beginPath(); ctx.arc(st.x, st.y - 87, 10, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#42251e'; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.moveTo(st.x - 26, st.y + 20); ctx.lineTo(st.x + 26, st.y + 20);
-            ctx.moveTo(st.x - 24, st.y + 38); ctx.lineTo(st.x + 24, st.y + 38); ctx.stroke();
-          }
-
           ctx.font = '700 11px Inter, sans-serif';
           ctx.textAlign = 'center';
           ctx.fillStyle = '#ffffff';
           ctx.fillText(st.name, st.x, st.y - st.radius - 10);
         }
+      }
+
+      function drawThousandSunny(st, nowSec) {
+        const x = st.x;
+        const y = st.y;
+        const bob = Math.sin(nowSec * 2.2) * 1.5;
+        ctx.save();
+        ctx.translate(x, y + bob);
+
+        ctx.fillStyle = 'rgba(15, 23, 42, .34)';
+        ctx.beginPath();
+        ctx.ellipse(2, 19, 110, 39, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowColor = 'rgba(15, 23, 42, .5)';
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetY = 7;
+        ctx.fillStyle = '#713b2c';
+        ctx.strokeStyle = '#3e241e';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-104, -25);
+        ctx.quadraticCurveTo(-88, -39, -57, -36);
+        ctx.lineTo(53, -31);
+        ctx.quadraticCurveTo(83, -28, 104, 0);
+        ctx.quadraticCurveTo(84, 31, 52, 34);
+        ctx.lineTo(-62, 37);
+        ctx.quadraticCurveTo(-91, 35, -104, 21);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+
+        ctx.fillStyle = '#bd7540';
+        ctx.strokeStyle = '#e7b66c';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(-75, -24, 126, 48, 13);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#70402d';
+        ctx.lineWidth = 2;
+        for (let plank = -14; plank <= 14; plank += 14) {
+          ctx.beginPath();
+          ctx.moveTo(-65, plank);
+          ctx.lineTo(42, plank);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = '#f0d7a3';
+        ctx.strokeStyle = '#8c542d';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.roundRect(-40, -18, 30, 36, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.roundRect(11, -18, 30, 36, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#f2d394';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-27, -16);
+        ctx.lineTo(-27, -68);
+        ctx.moveTo(25, -16);
+        ctx.lineTo(25, -59);
+        ctx.stroke();
+        ctx.fillStyle = '#fff5d9';
+        ctx.strokeStyle = '#bd7540';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-24, -64);
+        ctx.lineTo(-24, -24);
+        ctx.lineTo(-64, -25);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(28, -55);
+        ctx.lineTo(28, -23);
+        ctx.lineTo(61, -26);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f7d15b';
+        ctx.strokeStyle = '#8a4c29';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(78, -2, 13, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fff2ad';
+        ctx.beginPath();
+        ctx.arc(78, -2, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#f0d7a3';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-88, -17);
+        ctx.lineTo(-88, 14);
+        ctx.moveTo(52, -20);
+        ctx.lineTo(52, 22);
+        ctx.stroke();
+        ctx.fillStyle = '#e6b24e';
+        ctx.beginPath();
+        ctx.arc(-84, -25, 5, 0, Math.PI * 2);
+        ctx.arc(-84, 22, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
 
       function drawWallsAndGates() {
@@ -1757,7 +1973,9 @@
           ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
           ctx.beginPath(); ctx.roundRect(cx - 56, cy - 20, 112, 40, 10); ctx.fill();
           ctx.fillStyle = '#ffffff'; ctx.font = '800 11px Inter, sans-serif'; ctx.textAlign = 'center';
-          ctx.fillText(g.reqGold > 0 ? `LOCKED · ${g.reqGold} GOLD KEYS` : `LOCKED · ${g.reqGreen} LOG POSES`, cx, cy + 4);
+          const requirement = g.reqSpecial > 0 ? `${g.reqSpecial} IMU KEYCARD`
+            : g.reqGold > 0 ? `${g.reqGold} GOLD KEYS` : `${g.reqGreen} LOG POSES`;
+          ctx.fillText(`LOCKED · ${requirement}`, cx, cy + 4);
         }
       }
 
@@ -1782,12 +2000,14 @@
           const bob = Math.sin(nowSec * 3.5 + drop.bob) * 3;
           const berry = drop.type === 'BERRY';
           const goldKey = drop.type === 'GOLD_KEY';
+          const imuKeycard = drop.type === 'IMU_KEYCARD';
           ctx.fillStyle = berry ? 'rgba(255, 197, 78, 0.24)'
-            : goldKey ? 'rgba(250, 204, 21, 0.32)' : 'rgba(180, 83, 9, 0.25)';
+            : goldKey ? 'rgba(250, 204, 21, 0.32)'
+              : imuKeycard ? 'rgba(244, 63, 94, 0.32)' : 'rgba(180, 83, 9, 0.25)';
           ctx.beginPath(); ctx.ellipse(drop.x, drop.y + 7, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = berry ? '#e5a82f' : goldKey ? '#facc15' : '#92400e';
+          ctx.fillStyle = berry ? '#e5a82f' : goldKey ? '#facc15' : imuKeycard ? '#f43f5e' : '#92400e';
           ctx.beginPath(); ctx.arc(drop.x, drop.y + bob, berry ? 8 : 10, 0, Math.PI * 2); ctx.fill();
-          ctx.strokeStyle = berry ? '#fff0b0' : goldKey ? '#fff1a8' : '#d6a68c';
+          ctx.strokeStyle = berry ? '#fff0b0' : goldKey ? '#fff1a8' : imuKeycard ? '#fecdd3' : '#d6a68c';
           ctx.lineWidth = 2; ctx.stroke();
           if (berry) {
             ctx.fillStyle = '#fff3c4';
@@ -1800,6 +2020,21 @@
             ctx.moveTo(drop.x, drop.y + bob);
             ctx.lineTo(drop.x + 7, drop.y + bob + 6);
             ctx.lineTo(drop.x + 10, drop.y + bob + 3);
+            ctx.stroke();
+          } else if (imuKeycard) {
+            ctx.fillStyle = '#fff1f2';
+            ctx.font = '800 8px Inter, sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('IMU', drop.x, drop.y + 3 + bob);
+          } else if (drop.type === 'ESCAPE_KEY') {
+            ctx.strokeStyle = '#fff7cc';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(drop.x - 3, drop.y - 1 + bob, 4, 0, Math.PI * 2);
+            ctx.moveTo(drop.x + 1, drop.y + 2 + bob);
+            ctx.lineTo(drop.x + 10, drop.y + 11 + bob);
+            ctx.lineTo(drop.x + 13, drop.y + 8 + bob);
+            ctx.moveTo(drop.x + 6, drop.y + 7 + bob);
+            ctx.lineTo(drop.x + 9, drop.y + 4 + bob);
             ctx.stroke();
           } else {
             ctx.fillStyle = '#f5e8df';
@@ -2301,8 +2536,6 @@
         if (e.button === 0) {
           mouse.down = true;
           if (serverSnap && serverSnap.mode === 'PLAYING' && !activeModal) {
-            playSound('fire');
-            lastShotSoundAt = performance.now();
             sendActionToJava('FIRE');
           }
         }
@@ -2381,13 +2614,13 @@
 
       buildDifficultyUI();
       updateAudioToggle();
-      setInterval(pollJavaState, 50);
+      setInterval(pollJavaState, 100);
       setInterval(sendInputToJava, 33);
 
       function loop(ts) {
         const dt = lastFrameMs === 0 ? 0 : Math.min((ts - lastFrameMs) / 1000, 0.05);
         lastFrameMs = ts;
-        updateClientSimulation(dt, ts);
+        updateClientSimulation(dt);
         render(ts / 1000);
         requestAnimationFrame(loop);
       }

@@ -36,10 +36,13 @@ public class Projectile {
         this.hitEnemyIds = new ArrayList<>();
     }
 
-    public void update(double dt) {
-        x += vx * dt;
-        y += vy * dt;
+    public void advanceLifetime(double dt) {
         remainingLife -= dt;
+    }
+
+    public void setPosition(double x, double y) {
+        this.x = x;
+        this.y = y;
     }
 
     public boolean hasAlreadyHit(int enemyId) {

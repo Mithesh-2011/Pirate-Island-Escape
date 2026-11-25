@@ -30,7 +30,6 @@ public class GameEngine {
 
     private boolean keyUp, keyDown, keyLeft, keyRight;
     private boolean firingHeld;
-    private double inputAimAngle;
 
     private Player player;
     private final List<WorldObstacle> walls;
@@ -112,7 +111,6 @@ public class GameEngine {
         this.keyLeft = false;
         this.keyRight = false;
         this.firingHeld = false;
-        this.inputAimAngle = 0.0;
 
         this.walls.clear();
         this.gates.clear();
@@ -167,7 +165,6 @@ public class GameEngine {
         addSectorBarrier(4540);
         gates.add(new SectorGate("gate4", "Sector 4 Red-Line Gate", 4540, 1210, 38, 180,
                 gateReq + 1, 0, "#a74433"));
-
         walls.add(new WorldObstacle(2960, 460, 28, 210, "ruin"));
         walls.add(new WorldObstacle(3252, 460, 28, 210, "ruin"));
         walls.add(new WorldObstacle(2960, 645, 105, 28, "ruin"));
@@ -180,13 +177,13 @@ public class GameEngine {
         addRealmWalls(6500, 600, 1300, 1400, "gold_realm_wall");
         addRealmWalls(8700, 600, 1900, 1600, "imu_realm_wall");
         portals.add(new PortalRoute("gold_key_entry", "Gold Key Realm Portal", MAIN_REALM,
-                GOLD_KEY_REALM, 2340, 1800, 7100, 1500));
+                GOLD_KEY_REALM, 2340, 1300, 7100, 1500));
         portals.add(new PortalRoute("gold_key_exit", "Return to Section 2", GOLD_KEY_REALM,
-                MAIN_REALM, 7100, 1800, 2340, 1800));
-        portals.add(new PortalRoute("imu_entry", "Empty Throne Portal", MAIN_REALM,
-                IMU_REALM, 5140, 1300, 9300, 1800));
+                MAIN_REALM, 7100, 1800, 2340, 1300));
+        portals.add(new PortalRoute("imu_entry", "IMU Portal", MAIN_REALM,
+                IMU_REALM, 5100, 1300, 9300, 1800));
         portals.add(new PortalRoute("imu_exit", "Return to Section 5", IMU_REALM,
-                MAIN_REALM, 9600, 1900, 5140, 1300));
+                MAIN_REALM, 9600, 1900, 5100, 1300));
 
         chests.add(new RarityChest(700, 1400, 0));
 
@@ -219,16 +216,17 @@ public class GameEngine {
 
     private void addSectionObstacles() {
         double[][] sections = {
-            {300, 1740}, {1778, 2690}, {2728, 3590}, {3628, 4540}, {4578, 5360}
+            {840, 1740}, {1778, 2690}, {2728, 3590}, {3628, 4540}, {4578, 5360}
         };
-        double[] obstacleRows = {1050, 1760};
+        double[] obstacleRows = {740, 1040, 1480, 1840};
         String[] materials = {"crate", "tree"};
         for (int section = 0; section < sections.length; section++) {
             double minX = sections[section][0];
             double width = sections[section][1] - minX;
             for (int row = 0; row < obstacleRows.length; row++) {
                 for (int column = 0; column < 5; column++) {
-                    double centerX = minX + width * (column + 1) / 6.0;
+                    double stagger = row % 2 == 0 ? -width / 24.0 : width / 24.0;
+                    double centerX = minX + width * (column + 1) / 6.0 + stagger;
                     double centerY = obstacleRows[row];
                     String type = materials[(column + row + section) % materials.length];
                     if ("tree".equals(type)) {
@@ -295,6 +293,54 @@ public class GameEngine {
         return true;
     }
 
+    private boolean overlapsSectionObstacle(double x, double y, double radius) {
+        for (WorldObstacle wall : walls) {
+            if (!"crate".equals(wall.getMaterialType()) && !"tree".equals(wall.getMaterialType())) {
+                continue;
+            }
+            double closestX = Math.max(wall.getX(), Math.min(x, wall.getX() + wall.getWidth()));
+            double closestY = Math.max(wall.getY(), Math.min(y, wall.getY() + wall.getHeight()));
+            double dx = x - closestX;
+            double dy = y - closestY;
+            if (dx * dx + dy * dy < radius * radius) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private double[] findEnemySpawnPosition(double x, double y, double radius) {
+        double sectionMinX = Double.NEGATIVE_INFINITY;
+        double sectionMaxX = Double.POSITIVE_INFINITY;
+        if (x >= 260.0 && x < 5360.0) {
+            double[] sectionEnds = {1740.0, 2690.0, 3590.0, 4540.0, 5360.0};
+            sectionMinX = 260.0;
+            for (double sectionEnd : sectionEnds) {
+                sectionMaxX = sectionEnd;
+                if (x < sectionEnd) {
+                    break;
+                }
+                sectionMinX = sectionEnd;
+            }
+        }
+
+        for (int distance = 0; distance <= 240; distance += 20) {
+            int angleSteps = distance == 0 ? 1 : 16;
+            for (int angle = 0; angle < angleSteps; angle++) {
+                double radians = Math.PI * 2.0 * angle / angleSteps;
+                double candidateX = x + Math.cos(radians) * distance;
+                double candidateY = y + Math.sin(radians) * distance;
+                if (candidateX - radius < sectionMinX || candidateX + radius >= sectionMaxX) {
+                    continue;
+                }
+                if (!overlapsSectionObstacle(candidateX, candidateY, radius)) {
+                    return new double[]{candidateX, candidateY};
+                }
+            }
+        }
+        throw new IllegalStateException("Unable to find a clear enemy spawn near (" + x + ", " + y + ")");
+    }
+
     private void spawnPirates(int gateReq, double hpMult, double dmgMult) {
 
         addEnemy("buggy", "Buggy Pirate", 1050, 820, 21, 65, 125, 12, 1.65, 340, 8, 1, 0, "#ef4444", "#38bdf8", false, hpMult, dmgMult);
@@ -339,9 +385,11 @@ public class GameEngine {
         ensureSectionEnemyCount(3628, 4540, gateReq * 2, hpMult, dmgMult,
                 new double[][] {{3680, 720}, {3860, 1880}, {4020, 740}, {4200, 1880}, {4480, 740},
                         {3700, 1840}, {3880, 720}, {4100, 1880}, {4300, 740}, {4480, 1880}, {3720, 980}});
-        ensureSectionEnemyCount(4578, 5360, gateReq * 2, hpMult, dmgMult,
+        ensureSectionEnemyCount(4578, 5360, Math.max(0, gateReq * 2 - 1), hpMult, dmgMult,
                 new double[][] {{4620, 740}, {4680, 1880}, {4900, 740}, {5200, 1840}, {5300, 740},
                         {4600, 1840}, {4820, 1880}, {5000, 740}, {5240, 1880}, {5320, 980}});
+        addAddedSectorEnemy("imu_key_holder", "IMU Keycard Warden", 4860, 1300, 25, 300,
+                120, 28, 1.35, 360, 28, 0, "#9f1239", "#fda4af", hpMult, dmgMult);
 
     }
 
@@ -383,7 +431,8 @@ public class GameEngine {
                           double hpMult, double dmgMult) {
         int pressure = difficultyIndex;
         double worldX = boss || "gold_guardian".equals(type) ? x : mapEnemyX(x);
-        enemies.add(new PirateEnemy(nextEnemyId++, type, name, worldX, y, radius, hp,
+        double[] spawn = findEnemySpawnPosition(worldX, y, radius);
+        enemies.add(new PirateEnemy(nextEnemyId++, type, name, spawn[0], spawn[1], radius, hp,
                 speed * 0.85 * (1.0 + pressure * 0.05), dmg,
                 fireRate / (1.15 + pressure * 0.10) * ENEMY_FIRE_RATE_MULTIPLIER,
                 range, berries, greenDrop, "gold_guardian".equals(type) ? goldDrop : 0,
@@ -395,7 +444,8 @@ public class GameEngine {
                                      int berries, int goldDrop, String c1, String c2,
                                      double hpMult, double dmgMult) {
         int pressure = difficultyIndex;
-        enemies.add(new PirateEnemy(nextEnemyId++, type, name, x, y, radius, hp,
+        double[] spawn = findEnemySpawnPosition(x, y, radius);
+        enemies.add(new PirateEnemy(nextEnemyId++, type, name, spawn[0], spawn[1], radius, hp,
                 speed * 0.85 * (1.0 + pressure * 0.05), dmg,
                 fireRate / (1.15 + pressure * 0.10) * ENEMY_FIRE_RATE_MULTIPLIER,
                 range, berries, 0, 0, c1, c2, false, hpMult, dmgMult));
@@ -408,9 +458,36 @@ public class GameEngine {
         this.keyLeft = left;
         this.keyRight = right;
         this.firingHeld = firing && player != null && !isPlayerInSafeHarbor();
-        this.inputAimAngle = aimAngle;
         if (player != null) {
             player.setAimAngle(aimAngle);
+        }
+    }
+
+    public synchronized void updateClientMovement(double x, double y,
+                                                  java.util.Map<Integer, double[]> enemyPositions,
+                                                  java.util.Map<Long, double[]> projectilePositions) {
+        if (!"PLAYING".equals(gameMode) || player == null) {
+            return;
+        }
+        if (Double.isFinite(x) && Double.isFinite(y)) {
+            double[] resolved = resolveClientMovementPosition(
+                    player.getX(), player.getY(), x, y, player.getRadius());
+            player.setPosition(resolved[0], resolved[1]);
+        }
+        for (PirateEnemy enemy : enemies) {
+            double[] position = enemyPositions.get(enemy.getId());
+            if (position == null || !Double.isFinite(position[0]) || !Double.isFinite(position[1])) {
+                continue;
+            }
+            double[] resolved = resolveClientMovementPosition(
+                    enemy.getX(), enemy.getY(), position[0], position[1], enemy.getRadius());
+            enemy.setPosition(resolved[0], resolved[1]);
+        }
+        for (Projectile projectile : projectiles) {
+            double[] position = projectilePositions.get(projectile.getId());
+            if (position != null && Double.isFinite(position[0]) && Double.isFinite(position[1])) {
+                projectile.setPosition(position[0], position[1]);
+            }
         }
     }
 
@@ -443,14 +520,23 @@ public class GameEngine {
             if (isPlayerInSafeHarbor()) {
                 return "SAFE_HARBOR";
             }
-            if (player.getEnergy() < Weapon.ENERGY_COST_PER_SHOT
-                    && player.getEquippedWeapon().canFire()) {
+            Weapon weapon = player.getEquippedWeapon();
+            if (weapon.isReloading()) {
+                return "RELOADING";
+            }
+            if (!weapon.canFire()) {
+                if (weapon.isUnlocked() && weapon.getCurrentAmmo() <= 0) {
+                    weapon.startReload();
+                    return "NO_AMMO";
+                }
+                return "CANNOT_FIRE";
+            }
+            if (player.getEnergy() < Weapon.ENERGY_COST_PER_SHOT) {
                 pushEvent("Need " + (int) Weapon.ENERGY_COST_PER_SHOT + " Energy to fire",
                         "#38bdf8", player.getX(), player.getY() - 26);
                 return "LOW_ENERGY";
             }
-            fireEquippedWeapon();
-            return "FIRED";
+            return fireEquippedWeapon() ? "FIRED" : "CANNOT_FIRE";
         } else if ("DASH".equals(action)) {
             double dx = (keyRight ? 1.0 : 0.0) - (keyLeft ? 1.0 : 0.0);
             double dy = (keyDown ? 1.0 : 0.0) - (keyUp ? 1.0 : 0.0);
@@ -505,6 +591,14 @@ public class GameEngine {
     private String handleInteract() {
         for (PortalRoute portal : portals) {
             if (portal.realm.equals(currentRealm) && player.distanceTo(portal.x, portal.y) <= 92.0) {
+                if ("imu_entry".equals(portal.id) && player.getImuKeycards() < 1) {
+                    pushEvent("Find the IMU Keycard in section 5 first!",
+                            "#fda4af", player.getX(), player.getY() - 28);
+                    return "GATE_LOCKED";
+                }
+                if ("imu_entry".equals(portal.id)) {
+                    player.spendImuKeycards(1);
+                }
                 currentRealm = portal.destinationRealm;
                 player.setPosition(portal.destinationX, portal.destinationY);
                 projectiles.clear();
@@ -525,8 +619,11 @@ public class GameEngine {
         for (int i = 0; i < gates.size(); i++) {
             SectorGate g = gates.get(i);
             if (!g.isOpened() && player.distanceTo(g.getCenterX(), g.getCenterY()) <= 125.0) {
-                if (g.canUnlock(player.getGreenLogPoses(), player.getGoldKeycards())) {
-                    if (g.getRequiredGoldKeys() > 0) {
+                if (g.canUnlock(player.getGreenLogPoses(), player.getGoldKeycards(),
+                        player.getImuKeycards())) {
+                    if (g.getRequiredSpecialKeys() > 0) {
+                        player.spendImuKeycards(g.getRequiredSpecialKeys());
+                    } else if (g.getRequiredGoldKeys() > 0) {
                         player.spendGoldKeycards(g.getRequiredGoldKeys());
                         secretVaultUnlocked = true;
                     } else {
@@ -536,7 +633,9 @@ public class GameEngine {
                     pushEvent(g.getName() + " UNLOCKED!", "#22c55e", g.getCenterX(), g.getCenterY() - 20);
                     return "GATE_UNLOCKED";
                 } else {
-                    String msg = (g.getRequiredGoldKeys() > 0)
+                    String msg = (g.getRequiredSpecialKeys() > 0)
+                            ? "Need " + g.getRequiredSpecialKeys() + " IMU Keycard!"
+                            : (g.getRequiredGoldKeys() > 0)
                             ? "Need " + g.getRequiredGoldKeys() + " Gold Keycards!"
                             : "Need " + g.getRequiredGreenKeys() + " Green Log Poses!";
                     pushEvent(msg, "#f87171", g.getCenterX(), g.getCenterY() - 20);
@@ -558,14 +657,18 @@ public class GameEngine {
             return "SECRET_CLAIMED";
         }
 
-        if (MAIN_REALM.equals(currentRealm) && player.distanceTo(375, 1300) <= 104.0) {
-            if (imuDefeated) {
+        if (MAIN_REALM.equals(currentRealm) && player.distanceTo(450, 1300) <= 104.0) {
+            if (!imuDefeated) {
+                pushEvent("Defeat IMU on the Empty Throne first!", "#fbbf24", 450, 1240);
+                return "BOSS_ALIVE";
+            }
+            if (player.hasEscapeKey()) {
                 gameMode = "VICTORY";
-                pushEvent("GRAND LINE ESCAPED! VICTORY!", "#fbbf24", 375, 1240);
+                pushEvent("GRAND LINE ESCAPED! VICTORY!", "#fbbf24", 450, 1240);
                 return "VICTORY";
             } else {
-                pushEvent("Defeat IMU on the Empty Throne first!", "#fbbf24", 375, 1240);
-                return "BOSS_ALIVE";
+                pushEvent("Collect IMU's Escape Key first!", "#fbbf24", 450, 1240);
+                return "NO_ESCAPE_KEY";
             }
         }
 
@@ -647,28 +750,6 @@ public class GameEngine {
             fireEquippedWeapon();
         }
 
-        if (player.isDashing()) {
-            player.setPosition(
-                    player.getX() + player.getDashDirX() * 720.0 * dt,
-                    player.getY() + player.getDashDirY() * 720.0 * dt
-            );
-        } else {
-            double vx = (keyRight ? 1.0 : 0.0) - (keyLeft ? 1.0 : 0.0);
-            double vy = (keyDown ? 1.0 : 0.0) - (keyUp ? 1.0 : 0.0);
-            if (vx != 0.0 || vy != 0.0) {
-                double len = Math.hypot(vx, vy);
-                double speed = 268.0;
-                player.setPosition(
-                        player.getX() + (vx / len) * speed * dt,
-                        player.getY() + (vy / len) * speed * dt
-                );
-                player.incrementWalkBob(dt);
-            } else {
-                player.resetWalkBob();
-            }
-        }
-        resolveEntityWalls(player);
-
         for (int i = 0; i < chests.size(); i++) {
             RarityChest c = chests.get(i);
             c.update(dt);
@@ -701,6 +782,13 @@ public class GameEngine {
             } else if ("GOLD_KEY".equals(drop.getType())) {
                 player.addGoldKeycard();
                 pushEvent("+1 GOLD KEY", "#facc15", drop.getX(), drop.getY() - 16);
+            } else if ("IMU_KEYCARD".equals(drop.getType())) {
+                player.addImuKeycard();
+                pushEvent("+1 IMU KEYCARD", "#fda4af", drop.getX(), drop.getY() - 16);
+                } else if ("ESCAPE_KEY".equals(drop.getType())) {
+                    player.addEscapeKey();
+                    pushEvent("ESCAPE KEY ACQUIRED! RETURN TO THE THOUSAND SUNNY!",
+                            "#fbbf24", drop.getX(), drop.getY() - 16);
             }
             lootDrops.remove(i);
         }
@@ -712,6 +800,9 @@ public class GameEngine {
             pending.remainingSeconds -= dt;
             if (pending.remainingSeconds <= 0.0) {
                 PirateEnemy respawned = pending.enemy.respawnAs(nextEnemyId++);
+                double[] spawn = findEnemySpawnPosition(
+                        respawned.getX(), respawned.getY(), respawned.getRadius());
+                respawned.setPosition(spawn[0], spawn[1]);
                 enemies.add(respawned);
                 pushEvent(respawned.getName() + " returned to battle!", "#fb7185",
                         respawned.getX(), respawned.getY() - 24);
@@ -720,11 +811,6 @@ public class GameEngine {
                 i++;
             }
         }
-    }
-
-    private void resolveEntityWalls(Player p) {
-        double[] resolved = resolveEntityPosition(p.getX(), p.getY(), p.getRadius());
-        p.setPosition(resolved[0], resolved[1]);
     }
 
     private double[] resolveEntityPosition(double px, double py, double r) {
@@ -743,6 +829,25 @@ public class GameEngine {
             }
         }
         return new double[]{px, py};
+    }
+
+    private double[] resolveClientMovementPosition(double oldX, double oldY, double targetX,
+                                                   double targetY, double radius) {
+        double distance = Math.hypot(targetX - oldX, targetY - oldY);
+        if (!Double.isFinite(distance) || distance > 250.0 || distance < 0.5) {
+            return new double[]{oldX, oldY};
+        }
+        int steps = Math.max(1, (int) Math.ceil(distance / 8.0));
+        double x = oldX;
+        double y = oldY;
+        double stepX = (targetX - oldX) / steps;
+        double stepY = (targetY - oldY) / steps;
+        for (int step = 1; step <= steps; step++) {
+            double[] resolved = resolveEntityPosition(x + stepX, y + stepY, radius);
+            x = resolved[0];
+            y = resolved[1];
+        }
+        return new double[]{x, y};
     }
 
     private double[] resolveCircleAgainstRectangle(double cx, double cy, double radius,
@@ -799,16 +904,6 @@ public class GameEngine {
 
             double aggroRange = en.isBoss() ? 920.0 : 480.0;
             if (dist < aggroRange) {
-                double preferredDist = en.isBoss() ? 240.0 : (en.getAttackRange() * 0.68);
-                if (dist > preferredDist) {
-                    en.setPosition(
-                            en.getX() + (dx / dist) * en.getSpeed() * dt,
-                            en.getY() + (dy / dist) * en.getSpeed() * dt
-                    );
-                } else if (en.isBoss()) {
-                    en.setPosition(en.getX() + Math.cos(elapsedTime * 1.6) * en.getSpeed() * 0.7 * dt, en.getY());
-                }
-
                 if (en.getAttackTimer() <= 0.0 && dist <= en.getAttackRange() + 60.0) {
                     en.resetAttackTimer();
                     if (en.isBoss()) {
@@ -845,8 +940,6 @@ public class GameEngine {
                 }
             }
 
-            double[] resolved = resolveEntityPosition(en.getX(), en.getY(), en.getRadius());
-            en.setPosition(resolved[0], resolved[1]);
         }
     }
 
@@ -864,7 +957,7 @@ public class GameEngine {
         int i = 0;
         while (i < projectiles.size()) {
             Projectile pr = projectiles.get(i);
-            pr.update(dt);
+            pr.advanceLifetime(dt);
 
             if (pr.isExpired() || hitsAnyWallOrClosedGate(pr.getX(), pr.getY())
                     || (pr.isFromPlayer() && isPlayerInSafeHarbor())) {
@@ -949,7 +1042,8 @@ public class GameEngine {
         }
         if (en.isBoss()) {
             imuDefeated = true;
-            pushEvent("IMU DEFEATED! RETURN TO THE THOUSAND SUNNY!", "#fbbf24", en.getX(), en.getY() - 30);
+            lootDrops.add(new LootDrop("ESCAPE_KEY", en.getX() + 14, en.getY() + 8, 1));
+            pushEvent("IMU DEFEATED! GET TO THE SHIP!", "#fbbf24", en.getX(), en.getY() - 30);
             chests.add(new RarityChest(en.getX() - 60, en.getY() + 40, 4));
             chests.add(new RarityChest(en.getX() + 60, en.getY() + 40, 4));
             return;
@@ -957,12 +1051,15 @@ public class GameEngine {
 
         if (en.getGoldKeyDrop() > 0) {
             lootDrops.add(new LootDrop("GOLD_KEY", en.getX() + 14, en.getY() + 8, 1));
+        } else if (en.isImuKeycardCarrier()) {
+            lootDrops.add(new LootDrop("IMU_KEYCARD", en.getX() + 14, en.getY() + 8, 1));
         } else {
             pendingEnemyRespawns.add(new PendingEnemyRespawn(en, ENEMY_RESPAWN_SECONDS));
         }
         String rewardMsg = (en.getBerryDrop() > 0 ? "BERRIES DROPPED" : "")
                 + (logPoseDropped ? "  LOG POSE DROPPED" : "")
-                + (en.getGoldKeyDrop() > 0 ? "  GOLD KEY DROPPED!" : "");
+                + (en.getGoldKeyDrop() > 0 ? "  GOLD KEY DROPPED!" : "")
+                + (en.isImuKeycardCarrier() ? "  IMU KEYCARD DROPPED!" : "");
         if (!rewardMsg.isEmpty()) {
             pushEvent(rewardMsg, "#34d399", en.getX(), en.getY() - 20);
         }
@@ -1064,6 +1161,8 @@ public class GameEngine {
             rawCode = "ZONE 3:PONEGLYPH JUNGLE";
         } else if (player.getX() < 4540.0) {
             rawCode = "ZONE 4:CINDER COAST";
+        } else if (player.getX() < 5360.0) {
+            rawCode = "ZONE 5:RED-LINE CLIFFS";
         } else {
             rawCode = "ZONE 5:RED-LINE CLIFFS";
         }
@@ -1118,6 +1217,8 @@ public class GameEngine {
         sb.append("\"berries\":").append(player.getBerries()).append(",");
         sb.append("\"greenKeys\":").append(player.getGreenLogPoses()).append(",");
         sb.append("\"goldKeys\":").append(player.getGoldKeycards()).append(",");
+        sb.append("\"imuKeycards\":").append(player.getImuKeycards()).append(",");
+        sb.append("\"escapeKey\":").append(player.hasEscapeKey()).append(",");
         sb.append("\"gear5Active\":").append(player.hasGear5()).append(",");
         sb.append("\"aimAngle\":").append(String.format(java.util.Locale.US, "%.3f", player.getAimAngle())).append(",");
         sb.append("\"walkBob\":").append(String.format(java.util.Locale.US, "%.2f", player.getWalkBob())).append(",");
@@ -1169,6 +1270,7 @@ public class GameEngine {
               .append(",\"w\":").append(g.getWidth()).append(",\"h\":").append(g.getHeight())
               .append(",\"reqGreen\":").append(g.getRequiredGreenKeys())
               .append(",\"reqGold\":").append(g.getRequiredGoldKeys())
+              .append(",\"reqSpecial\":").append(g.getRequiredSpecialKeys())
               .append(",\"opened\":").append(g.isOpened())
               .append(",\"color\":\"").append(g.getHexColor()).append("\"}");
         }

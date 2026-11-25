@@ -10,6 +10,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -112,8 +114,26 @@ public class GameServer {
             boolean right = extractJsonBoolean(body, "right");
             boolean firing = extractJsonBoolean(body, "firing");
             double aimAngle = extractJsonDouble(body, "aimAngle", 0.0);
-            engine.updateInputState(up, down, left, right, firing, aimAngle);
-            sendJson(exchange, 200, "{\"ok\":true}");
+            try {
+                double playerX = extractJsonDouble(body, "playerX", Double.NaN);
+                double playerY = extractJsonDouble(body, "playerY", Double.NaN);
+                if (!Double.isFinite(playerX) || !Double.isFinite(playerY)) {
+                    throw new IllegalArgumentException("Missing player position");
+                }
+                Map<Long, double[]> enemyUpdates = parsePositionUpdates(
+                        extractJsonString(body, "enemyPositions", ""));
+                Map<Integer, double[]> enemyPositions = new HashMap<>();
+                for (Map.Entry<Long, double[]> entry : enemyUpdates.entrySet()) {
+                    enemyPositions.put(Math.toIntExact(entry.getKey()), entry.getValue());
+                }
+                Map<Long, double[]> projectilePositions = parsePositionUpdates(
+                        extractJsonString(body, "projectilePositions", ""));
+                engine.updateInputState(up, down, left, right, firing, aimAngle);
+                engine.updateClientMovement(playerX, playerY, enemyPositions, projectilePositions);
+                sendJson(exchange, 200, "{\"ok\":true}");
+            } catch (IllegalArgumentException | ArithmeticException ex) {
+                sendJson(exchange, 400, "{\"error\":\"Invalid movement update\"}");
+            }
         }
     }
 
@@ -129,32 +149,38 @@ public class GameServer {
     }
 
     private String extractJsonString(String json, String key, String fallback) {
-        if (json == null) return fallback;
-        String token = "\"" + key + "\":\"";
-        int idx = json.indexOf(token);
-        if (idx == -1) return fallback;
-        int start = idx + token.length();
-        int end = json.indexOf("\"", start);
-        if (end == -1) return fallback;
-        return json.substring(start, end);
+        int start = jsonValueStart(json, key);
+        if (start < 0 || start >= json.length() || json.charAt(start) != '"') return fallback;
+        int end = start + 1;
+        boolean escaped = false;
+        while (end < json.length()) {
+            char current = json.charAt(end);
+            if (current == '"' && !escaped) {
+                return json.substring(start + 1, end);
+            }
+            if (current == '\\' && !escaped) {
+                escaped = true;
+            } else {
+                escaped = false;
+            }
+            end++;
+        }
+        return fallback;
     }
 
     private boolean extractJsonBoolean(String json, String key) {
-        if (json == null) return false;
-        String token = "\"" + key + "\":true";
-        return json.indexOf(token) != -1;
+        int start = jsonValueStart(json, key);
+        return start >= 0 && json.startsWith("true", start);
     }
 
     private double extractJsonDouble(String json, String key, double fallback) {
-        if (json == null) return fallback;
-        String token = "\"" + key + "\":";
-        int idx = json.indexOf(token);
-        if (idx == -1) return fallback;
-        int start = idx + token.length();
+        int start = jsonValueStart(json, key);
+        if (start < 0) return fallback;
         int end = start;
         while (end < json.length()) {
             char ch = json.charAt(end);
-            if ((ch >= '0' && ch <= '9') || ch == '.' || ch == '-') {
+            if ((ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == '+'
+                    || ch == 'e' || ch == 'E') {
                 end++;
             } else {
                 break;
@@ -166,6 +192,38 @@ public class GameServer {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    private int jsonValueStart(String json, String key) {
+        if (json == null) return -1;
+        int keyStart = json.indexOf("\"" + key + "\"");
+        if (keyStart < 0) return -1;
+        int colon = json.indexOf(':', keyStart + key.length() + 2);
+        if (colon < 0) return -1;
+        int start = colon + 1;
+        while (start < json.length() && Character.isWhitespace(json.charAt(start))) {
+            start++;
+        }
+        return start;
+    }
+
+    private Map<Long, double[]> parsePositionUpdates(String updates) {
+        Map<Long, double[]> positions = new HashMap<>();
+        if (updates.isEmpty()) return positions;
+        for (String record : updates.split(";")) {
+            String[] values = record.split(",", -1);
+            if (values.length != 3) {
+                throw new IllegalArgumentException("Invalid position record");
+            }
+            long id = Long.parseLong(values[0]);
+            double x = Double.parseDouble(values[1]);
+            double y = Double.parseDouble(values[2]);
+            if (id <= 0 || !Double.isFinite(x) || !Double.isFinite(y)) {
+                throw new IllegalArgumentException("Invalid position value");
+            }
+            positions.put(id, new double[]{x, y});
+        }
+        return positions;
     }
 
     private String readBody(HttpExchange exchange) throws IOException {
