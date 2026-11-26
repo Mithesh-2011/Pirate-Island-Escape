@@ -1,6 +1,6 @@
 # Grand Line Escape — Java Backend Architecture
 
-A top-down action escape game themed around **One Piece**, engineered with an authoritative Java backend (`com.sun.net.httpserver.HttpServer` + 60 Hz simulation engine) and a **60 FPS Browser Canvas Client**.
+A top-down action escape game themed around **One Piece**, engineered with an authoritative Java backend (`com.sun.net.httpserver.HttpServer` + 30 Hz simulation engine) and a **60 FPS Browser Canvas Client**.
 
 ---
 
@@ -11,7 +11,7 @@ GrandLine-JavaBackend/
 ├── src/
 │   ├── Main.java               # Entry point: runs boundary tests, starts server & opens browser
 │   ├── GameServer.java         # Built-in Java HttpServer (port 8080) & REST JSON API
-│   ├── GameEngine.java         # 60 Hz simulation engine, world builder, collisions & JSON serializer
+│   ├── GameEngine.java         # 30 Hz simulation engine, world builder, collisions & JSON serializer
 │   ├── Player.java             # Monkey D. Luffy class (HP, Energy, Dash, Weapons, String methods)
 │   ├── Weapon.java             # 6 weapons with Common -> Legendary rarity upgrades
 │   ├── PirateEnemy.java        # Villain pirates & multi-phase Final Boss IMU
@@ -55,7 +55,7 @@ Once started, open **`http://localhost:8080`** in your browser (it opens automat
 
 Use **New > Blueprint** in Render and connect this repository. Render reads `render.yaml`, builds the Java service from `Dockerfile`, and uses `/health` for health checks. The server binds to Render's `PORT` environment variable; local runs default to port 8080.
 
-The browser runs player, enemy, projectile, and camera movement at display frame rate. It sends compact position updates to Java, which keeps collision, combat, damage, and progression checks authoritative. State snapshots are polled less often to reduce host load. An original swashbuckling theme and synthesized sound effects run in the browser; shot sounds play only when ammunition is consumed. Use the **Audio** toggle to mute them.
+The browser runs player, enemy, projectile, and camera movement at display frame rate. It sends compact position updates to Java, which keeps collision, combat, damage, and progression checks authoritative. The server advances gameplay at 30 ticks per second while the browser renders at 60 FPS; state snapshots are polled less often to reduce host load. An original swashbuckling theme and synthesized sound effects run in the browser; shot sounds play only when ammunition is consumed. Use the **Audio** toggle to mute them.
 
 The map has five surface sections, each with twenty physical crates and trees arranged in alternating zigzags; tree trunks block players and projectiles. Enemies, chests, and portals are kept clear of these obstacles. The Boss Card Warden in section five drops the Boss Card that unlocks the IMU portal, now located in that same section. The Boss Card stays with you until the run ends, so you can reuse the portal freely. IMU retains boss-specific laser attacks in the Empty Throne realm.
 

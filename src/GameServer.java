@@ -17,6 +17,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class GameServer {
+    private static final int TICKS_PER_SECOND = 30;
+
     private final int port;
     private final GameEngine engine;
     private HttpServer server;
@@ -44,11 +46,11 @@ public class GameServer {
         ticker = Executors.newSingleThreadScheduledExecutor();
         ticker.scheduleAtFixedRate(() -> {
             try {
-                engine.tick(1.0 / 60.0);
+                engine.tick(1.0 / TICKS_PER_SECOND);
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
-        }, 0, 16, TimeUnit.MILLISECONDS);
+        }, 0, TimeUnit.SECONDS.toNanos(1) / TICKS_PER_SECOND, TimeUnit.NANOSECONDS);
     }
 
     private class HealthHandler implements HttpHandler {
