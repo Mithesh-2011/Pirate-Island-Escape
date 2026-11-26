@@ -1,6 +1,6 @@
 # Grand Line Escape — Java Backend Architecture
 
-A top-down action escape game themed around **One Piece**, engineered with an authoritative Java backend (`com.sun.net.httpserver.HttpServer` + 30 Hz simulation engine) and a **60 FPS Browser Canvas Client**.
+A top-down action escape game themed around **One Piece**, engineered with an authoritative Java backend (Jetty HTTP + WebSocket, 30 Hz simulation engine) and a **60 FPS Browser Canvas Client**.
 
 ---
 
@@ -10,7 +10,7 @@ A top-down action escape game themed around **One Piece**, engineered with an au
 GrandLine-JavaBackend/
 ├── src/
 │   ├── Main.java               # Entry point: runs boundary tests, starts server & opens browser
-│   ├── GameServer.java         # Built-in Java HttpServer (port 8080) & REST JSON API
+│   ├── GameServer.java         # Jetty HTTP server, WebSocket state stream, and REST JSON API
 │   ├── GameEngine.java         # 30 Hz simulation engine, world builder, collisions & JSON serializer
 │   ├── Player.java             # Monkey D. Luffy class (HP, Energy, Dash, Weapons, String methods)
 │   ├── Weapon.java             # 6 weapons with Common -> Legendary rarity upgrades
@@ -22,6 +22,7 @@ GrandLine-JavaBackend/
 │   ├── Projectile.java         # Active projectiles with piercing support
 │   ├── SkyLaser.java           # IMU boss orbital sky-beams
 │   └── BoundaryTestSuite.java  # Automated gameplay boundary and input-validation tests
+├── pom.xml                     # Maven build and Jetty WebSocket dependencies
 ├── web/
 │   └── index.html              # 60 FPS renderer, client-predicted movement, audio, level selection and HUD
 ├── Dockerfile                  # Multi-stage Java image for deployment
@@ -33,7 +34,9 @@ GrandLine-JavaBackend/
 
 ---
 
-## How to Run (Zero External JARs Required!)
+## How to Run
+
+Requires Java 21+ and Maven.
 
 ### Option A: One-Click Scripts
 - **Windows:** Double-click **`run.bat`**.
@@ -45,9 +48,8 @@ GrandLine-JavaBackend/
 
 ### Option B: Manual Terminal Commands
 ```bash
-mkdir -p out
-javac -d out src/*.java
-java -cp out Main
+mvn -DskipTests package
+java -jar target/game-server.jar
 ```
 Once started, open **`http://localhost:8080`** in your browser (it opens automatically on most desktops).
 
@@ -55,7 +57,7 @@ Once started, open **`http://localhost:8080`** in your browser (it opens automat
 
 Use **New > Blueprint** in Render and connect this repository. Render reads `render.yaml`, builds the Java service from `Dockerfile`, and uses `/health` for health checks. The server binds to Render's `PORT` environment variable; local runs default to port 8080.
 
-The browser runs player, enemy, projectile, and camera movement at display frame rate. It sends compact position updates to Java, which keeps collision, combat, damage, and progression checks authoritative. The server advances gameplay at 30 ticks per second while the browser renders at 60 FPS; state snapshots are polled less often to reduce host load. An original swashbuckling theme and synthesized sound effects run in the browser; shot sounds play only when ammunition is consumed. Use the **Audio** toggle to mute them.
+The browser runs player, enemy, projectile, and camera movement at display frame rate. It sends movement and position updates over a persistent WebSocket connection; Java keeps collision, combat, damage, and progression checks authoritative, and pushes state snapshots 15 times per second. Discrete actions and game start remain HTTP requests. If the WebSocket disconnects, the browser reconnects and temporarily falls back to HTTP updates. The server advances gameplay at 30 ticks per second while the browser renders at 60 FPS. An original swashbuckling theme and synthesized sound effects run in the browser; shot sounds play only when ammunition is consumed. Use the **Audio** toggle to mute them.
 
 The map has five surface sections, each with twenty physical crates and trees arranged in alternating zigzags; tree trunks block players and projectiles. The Secret Vault approach is kept clear of obstacles, and enemies, chests, and portals are also kept clear of them. The Boss Card Warden in section five drops the Boss Card that unlocks the IMU portal, now located in that same section. The Boss Card stays with you until the run ends, so you can reuse the portal freely. IMU retains boss-specific laser attacks in the Empty Throne realm.
 

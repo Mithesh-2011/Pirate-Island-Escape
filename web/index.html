@@ -831,6 +831,9 @@
       let bossReturnToastUntil = 0;
       let pollingState = false;
       let sendingInput = false;
+      let gameSocket = null;
+      let socketRetryMs = 500;
+      let socketReconnectTimer = null;
       let sessionRevision = 0;
       let startingGame = false;
       let clientPlayer = null;
@@ -857,17 +860,51 @@
           const res = await fetch('/api/state');
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const data = await res.json();
-          if (requestRevision !== sessionRevision) return;
-          document.getElementById('serverWarningBanner').classList.add('hidden');
-          reconcileClientVisuals(data, serverSnap);
-          serverSnap = data;
-          ingestServerEvents(data.events || []);
-          syncHudFromJava(data);
+          applyJavaState(data, requestRevision);
         } catch (err) {
           document.getElementById('serverWarningBanner').classList.remove('hidden');
         } finally {
           pollingState = false;
         }
+      }
+
+      function applyJavaState(data, requestRevision = sessionRevision) {
+        if (requestRevision !== sessionRevision || startingGame) return;
+        document.getElementById('serverWarningBanner').classList.add('hidden');
+        reconcileClientVisuals(data, serverSnap);
+        serverSnap = data;
+        ingestServerEvents(data.events || []);
+        syncHudFromJava(data);
+      }
+
+      function connectGameSocket() {
+        if (gameSocket && (gameSocket.readyState === WebSocket.OPEN
+            || gameSocket.readyState === WebSocket.CONNECTING)) return;
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+        gameSocket = socket;
+        socket.onopen = () => {
+          if (gameSocket !== socket) return;
+          socketRetryMs = 500;
+          document.getElementById('serverWarningBanner').classList.add('hidden');
+        };
+        socket.onmessage = event => {
+          if (gameSocket !== socket) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type !== 'error') applyJavaState(data);
+          } catch (error) {
+            console.error('Unable to read game state from server:', error);
+          }
+        };
+        socket.onerror = () => socket.close();
+        socket.onclose = () => {
+          if (gameSocket !== socket) return;
+          gameSocket = null;
+          clearTimeout(socketReconnectTimer);
+          socketReconnectTimer = setTimeout(connectGameSocket, socketRetryMs);
+          socketRetryMs = Math.min(socketRetryMs * 1.5, 5000);
+        };
       }
 
       function reconcileClientVisuals(data, previous) {
@@ -1218,12 +1255,16 @@
           projectilePositions: serializePositions(projectileVisuals)
         };
         try {
-          const response = await fetch('/api/input', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (!response.ok) throw new Error('HTTP ' + response.status);
+          if (gameSocket && gameSocket.readyState === WebSocket.OPEN) {
+            gameSocket.send(JSON.stringify(payload));
+          } else {
+            const response = await fetch('/api/input', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+          }
         } catch (e) {
           document.getElementById('serverWarningBanner').classList.remove('hidden');
         }
@@ -2514,7 +2555,10 @@
 
       buildDifficultyUI();
       updateAudioToggle();
-      setInterval(pollJavaState, 100);
+      connectGameSocket();
+      setInterval(() => {
+        if (!gameSocket || gameSocket.readyState !== WebSocket.OPEN) pollJavaState();
+      }, 1000);
       setInterval(sendInputToJava, 33);
 
       function loop(ts) {

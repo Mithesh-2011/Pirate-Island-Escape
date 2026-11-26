@@ -1,13 +1,12 @@
 @echo off
 title Grand Line Escape - Java Backend
-if not exist out mkdir out
-echo Compiling 12 Java Backend Classes...
-javac -d out src\*.java
+echo Building Grand Line Escape...
+mvn -q -DskipTests package
 if %errorlevel% neq 0 (
-    echo Compilation failed! Verify Java JDK 11+ is installed.
+    echo Build failed! Verify Java JDK 21+ and Maven are installed.
     pause
     exit /b %errorlevel%
 )
 echo Starting Java Backend Server on http://localhost:8080 ...
-java -cp out Main
+java -jar target\game-server.jar
 pause
