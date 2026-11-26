@@ -1,40 +1,52 @@
-# Grand Line Escape — Java Backend Architecture
+# Grand Line Escape
 
-A top-down action escape game themed around **One Piece**, engineered with an authoritative Java backend (Jetty HTTP + WebSocket, 30 Hz simulation engine) and a **60 FPS Browser Canvas Client**.
+A top-down action-adventure game inspired by **One Piece**. Explore a hazardous island, fight pirates, collect keys and upgrades, defeat IMU, and escape. The game pairs a Java backend with a 60 FPS browser-based canvas client.
 
 ---
 
-## Complete Architecture (`src/` + `web/`)
+## Project Structure
 
 ```text
 GrandLine-JavaBackend/
 ├── src/
-│   ├── Main.java               # Entry point: runs boundary tests, starts server & opens browser
-│   ├── GameServer.java         # Jetty HTTP server, WebSocket state stream, and REST JSON API
-│   ├── GameEngine.java         # 30 Hz simulation engine, world builder, collisions & JSON serializer
-│   ├── Player.java             # Monkey D. Luffy class (HP, Energy, Dash, Weapons, String methods)
-│   ├── Weapon.java             # 6 weapons with Common -> Legendary rarity upgrades
-│   ├── PirateEnemy.java        # Villain pirates & multi-phase Final Boss IMU
-│   ├── RarityChest.java        # Weighted Math.random() chests replacing trivia questions for HP/Energy
-│   ├── SectorGate.java         # Progression barriers unlocked with Green Log Poses & Gold Keycards
-│   ├── WorldObstacle.java      # Solid walls/rocks/pillars with Circle-vs-AABB sliding collision math
-│   ├── LootDrop.java           # Physical berry and Log Pose pickups
-│   ├── Projectile.java         # Active projectiles with piercing support
-│   ├── SkyLaser.java           # IMU boss orbital sky-beams
-│   └── BoundaryTestSuite.java  # Automated gameplay boundary and input-validation tests
+│   ├── Main.java               # Runs boundary checks and starts the server
+│   ├── GameServer.java         # Jetty HTTP API and WebSocket state stream
+│   ├── GameEngine.java         # Simulation, world, combat, collisions, and snapshots
+│   ├── Player.java             # Player stats, movement state, weapons, and upgrades
+│   ├── Weapon.java             # Weapon stats, ammo, reload, and rarity upgrades
+│   ├── PirateEnemy.java        # Pirate enemies, guardians, and IMU
+│   ├── RarityChest.java        # Chests and their rewards
+│   ├── SectorGate.java         # Key-locked progression gates
+│   ├── WorldObstacle.java      # Solid obstacles and collision resolution
+│   ├── LootDrop.java           # Physical item pickups
+│   ├── Projectile.java         # Player and enemy projectiles
+│   ├── SkyLaser.java           # IMU's laser attacks
+│   └── BoundaryTestSuite.java  # Gameplay and input-validation tests
 ├── pom.xml                     # Maven build and Jetty WebSocket dependencies
 ├── web/
-│   └── index.html              # 60 FPS renderer, client-predicted movement, audio, level selection and HUD
-├── Dockerfile                  # Multi-stage Java image for deployment
-├── render.yaml                 # Render Blueprint web-service configuration
-├── run.bat                     # One-click Windows compile & launch script
-├── run.sh                      # One-click macOS / Linux compile & launch script
-└── README.md                   # Architecture & gameplay guide
+│   └── index.html              # Canvas game, controls, HUD, audio, and menus
+├── Dockerfile                  # Container build
+├── run.bat                     # Windows build and launch script
+├── run.sh                      # macOS / Linux build and launch script
+└── README.md                   # Project and gameplay guide
 ```
 
----
+## Game Features
 
-## How to Run
+- **Explore five island sections** with solid crates, trees, gates, chests, and pirate encounters.
+- **Fight and upgrade:** aim and fire weapons, dash to evade, reload, earn berries, buy weapons, and upgrade weapon rarity.
+- **Collect and progress:** gather Log Poses to open section gates, and use chests for health, energy, and berries.
+- **Explore separate realms:** challenge three Gold Key Guardians to collect the keys for the Secret Poneglyph Vault; defeat the Boss Card Warden to unlock the route to IMU's Empty Throne realm.
+- **Awaken Gear 5** in the vault for increased damage, higher maximum health, and faster energy regeneration.
+- **Complete the escape:** defeat IMU, collect the Escape Key, return to the Thousand Sunny, and interact with the ship.
+
+## Technical Overview
+
+The browser renders at 60 FPS and predicts player movement locally for responsive controls. Movement and position updates are sent over a persistent WebSocket. The Java server validates collisions, combat, damage, and progression, advances the game at 30 ticks per second, and pushes state snapshots 15 times per second. Game start and discrete actions use HTTP; the client reconnects and temporarily falls back to HTTP if the WebSocket disconnects.
+
+The server uses Jetty and reads its listening port from the `PORT` environment variable, defaulting to `8080`. The `/health` endpoint provides a basic health check.
+
+## Build and Run
 
 Requires Java 21+ and Maven.
 
@@ -51,15 +63,10 @@ Requires Java 21+ and Maven.
 mvn -DskipTests package
 java -jar target/game-server.jar
 ```
-Once started, open **`http://localhost:8080`** in your browser (it opens automatically on most desktops).
 
-### Deploy to Render
+Once started, open **`http://localhost:8080`** in your browser (it opens automatically on most desktops). To run the gameplay checks after building, use `java -cp target/classes BoundaryTestSuite`.
 
-Use **New > Blueprint** in Render and connect this repository. Render reads `render.yaml`, builds the Java service from `Dockerfile`, and uses `/health` for health checks. The server binds to Render's `PORT` environment variable; local runs default to port 8080.
-
-The browser runs player, enemy, projectile, and camera movement at display frame rate. It sends movement and position updates over a persistent WebSocket connection; Java keeps collision, combat, damage, and progression checks authoritative, and pushes state snapshots 15 times per second. Discrete actions and game start remain HTTP requests. If the WebSocket disconnects, the browser reconnects and temporarily falls back to HTTP updates. The server advances gameplay at 30 ticks per second while the browser renders at 60 FPS. An original swashbuckling theme and synthesized sound effects run in the browser; shot sounds play only when ammunition is consumed. Use the **Audio** toggle to mute them.
-
-The map has five surface sections, each with twenty physical crates and trees arranged in alternating zigzags; tree trunks block players and projectiles. The Secret Vault approach is kept clear of obstacles, and enemies, chests, and portals are also kept clear of them. The Boss Card Warden in section five drops the Boss Card that unlocks the IMU portal, now located in that same section. The Boss Card stays with you until the run ends, so you can reuse the portal freely. IMU retains boss-specific laser attacks in the Empty Throne realm.
+The game also includes an original synthesized soundtrack and sound effects. Use the **Audio** toggle to mute them.
 
 ---
 
