@@ -57,7 +57,7 @@ Use **New > Blueprint** in Render and connect this repository. Render reads `ren
 
 The browser runs player, enemy, projectile, and camera movement at display frame rate. It sends compact position updates to Java, which keeps collision, combat, damage, and progression checks authoritative. The server advances gameplay at 30 ticks per second while the browser renders at 60 FPS; state snapshots are polled less often to reduce host load. An original swashbuckling theme and synthesized sound effects run in the browser; shot sounds play only when ammunition is consumed. Use the **Audio** toggle to mute them.
 
-The map has five surface sections, each with twenty physical crates and trees arranged in alternating zigzags; tree trunks block players and projectiles. Enemies, chests, and portals are kept clear of these obstacles. The Boss Card Warden in section five drops the Boss Card that unlocks the IMU portal, now located in that same section. The Boss Card stays with you until the run ends, so you can reuse the portal freely. IMU retains boss-specific laser attacks in the Empty Throne realm.
+The map has five surface sections, each with twenty physical crates and trees arranged in alternating zigzags; tree trunks block players and projectiles. The Secret Vault approach is kept clear of obstacles, and enemies, chests, and portals are also kept clear of them. The Boss Card Warden in section five drops the Boss Card that unlocks the IMU portal, now located in that same section. The Boss Card stays with you until the run ends, so you can reuse the portal freely. IMU retains boss-specific laser attacks in the Empty Throne realm.
 
 ---
 

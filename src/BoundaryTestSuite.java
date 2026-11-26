@@ -224,6 +224,23 @@ public class BoundaryTestSuite {
         }
         assertCondition(evenlySpacedObstacles,
                 "All five sections have twenty alternating, staggered crates and trees");
+        GameEngine vaultAccessEngine = new GameEngine();
+        vaultAccessEngine.resetGame("Normal", "Vault Access Test");
+        vaultAccessEngine.getPlayer().setPosition(3120, 800);
+        vaultAccessEngine.updateClientMovement(3120, 700,
+                java.util.Collections.emptyMap(), java.util.Collections.emptyMap());
+        vaultAccessEngine.getPlayer().addGoldKeycard();
+        vaultAccessEngine.getPlayer().addGoldKeycard();
+        vaultAccessEngine.getPlayer().addGoldKeycard();
+        boolean vaultAccessible = Math.abs(vaultAccessEngine.getPlayer().getY() - 700) < 1.0
+                && "GATE_UNLOCKED".equals(vaultAccessEngine.executePlayerAction("INTERACT", 0));
+        vaultAccessEngine.updateClientMovement(3120, 540,
+                java.util.Collections.emptyMap(), java.util.Collections.emptyMap());
+        vaultAccessible &= Math.abs(vaultAccessEngine.getPlayer().getY() - 540) < 1.0
+                && "SECRET_CLAIMED".equals(
+                        vaultAccessEngine.executePlayerAction("INTERACT", 0));
+        assertCondition(vaultAccessible,
+                "The vault entrance and Gear 5 pedestal are reachable without obstacle blockage");
         boolean entitiesAvoidObstacles = sectionEngine.getEnemies().stream()
                 .allMatch(enemy -> !overlapsSectionObstacle(sectionEngine, enemy.getX(), enemy.getY(),
                         enemy.getRadius()))

@@ -228,6 +228,10 @@ public class GameEngine {
                     double stagger = row % 2 == 0 ? -width / 24.0 : width / 24.0;
                     double centerX = minX + width * (column + 1) / 6.0 + stagger;
                     double centerY = obstacleRows[row];
+                    if (section == 2 && row == 0 && column == 2) {
+                        // Keep the approach from the Secret Vault gate clear.
+                        centerX = 3200;
+                    }
                     String type = materials[(column + row + section) % materials.length];
                     if ("tree".equals(type)) {
                         walls.add(new WorldObstacle(centerX - 17, centerY - 12, 34, 32, type));
