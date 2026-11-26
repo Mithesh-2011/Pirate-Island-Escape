@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: grand-line-escape
+    name: Pirate-Island-Escape
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
